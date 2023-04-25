@@ -19,19 +19,54 @@
 #include <linux/fdtable.h>
 #include <linux/processor.h>
 #include <linux/pci.h>
-#include <uapi/linux/kfd_ioctl.h>
 #include "chardev.h"
+#include "amdair_ioctl.h"
+#include "object.h"
 
-#define DEVICE_INDEX_STR_MAX 15
-
-#define VCK5000_IOCTL_DEF(ioctl, _func, _flags)                                \
+/*
+	Define an entry in the ioctl table
+	The entry's index equals the ioctl number
+*/
+#define AMDAIR_IOCTL_DEF(ioctl, _func, _flags)                                 \
 	[_IOC_NR(ioctl)] = { .cmd = ioctl,                                     \
 			     .func = _func,                                    \
 			     .flags = _flags,                                  \
 			     .cmd_drv = 0,                                     \
 			     .name = #ioctl }
 
-#define HERD_CONTROLLER_BRAM_SIZE 0x1000
+/*
+The object handle is a simple capability that the kernel grants to a user.
+The handle is opaque to the user but is made up from deterministic parts:
+[39:36] device id
+[35:20] object id
+[19:12] type
+[11:0] empty (PAGE_SHIFT)
+*/
+#define HANDLE_TYPE_SHIFT 0
+#define HANDLE_TYPE_MASK 0xFF
+#define HANDLE_OBJECT_SHIFT 8
+#define HANDLE_OBJECT_MASK 0xFFFF
+#define HANDLE_DEVID_SHIFT 24
+#define HANDLE_DEVID_MASK 0xFF
+
+#define AMDAIR_CREATE_HANDLE(_dev_id, _obj_id, _type)                          \
+	(((((uint64_t)_dev_id & HANDLE_DEVID_MASK) << HANDLE_DEVID_SHIFT) |    \
+	  (((uint64_t)_obj_id & HANDLE_OBJECT_MASK) << HANDLE_OBJECT_SHIFT) |  \
+	  ((uint64_t)_type & HANDLE_TYPE_MASK))                                \
+	 << PAGE_SHIFT)
+#define AMDAIR_HANDLE_TYPE(_handle)                                            \
+	((_handle >> (HANDLE_TYPE_SHIFT + PAGE_SHIFT)) & HANDLE_TYPE_MASK)
+#define AMDAIR_HANDLE_OBJ_ID(_handle)                                          \
+	((_handle >> (HANDLE_OBJECT_SHIFT + PAGE_SHIFT)) & HANDLE_OBJECT_MASK)
+
+/*
+	Physical address of the BRAM
+	This is only needed because the device's info page uses physical addresses
+	Once that is fixed, this can be removed
+*/
+#define BRAM_PA 0x20100000000ULL
+
+#define QUEUE_ENTRY_SIZE 64 /* this is probably defined somewhere else */
 
 enum aie_address_validation {
 	AIE_ADDR_OK,
@@ -76,9 +111,10 @@ static int vck_open(struct inode *, struct file *);
 static int vck_release(struct inode *, struct file *);
 static int vck_mmap(struct file *, struct vm_area_struct *);
 
-static int vck5000_ioctl_get_version(struct file *filep, void *data);
-static int vck5000_ioctl_create_queue(struct file *filep, void *data);
-static int vck5000_ioctl_destroy_queue(struct file *filp, void *data);
+static int amdair_ioctl_get_version(struct file *filep, void *data);
+static int amdair_ioctl_destroy_object(struct file *filep, void *data);
+static int amdair_ioctl_create_queue(struct file *filep, void *data);
+static int amdair_ioctl_create_mem_region(struct file *filep, void *data);
 
 /* define sysfs attributes */
 struct amdair_attribute aie_attr_address = __ATTR_RW(address);
@@ -112,15 +148,13 @@ static int chardev_major = -1;
 static struct class *vck5000_class;
 static struct device *vck5000_chardev;
 
-/** Ioctl table */
-static const struct vck5000_ioctl_desc vck5000_ioctls[] = {
-	VCK5000_IOCTL_DEF(AMDKFD_IOC_GET_VERSION, vck5000_ioctl_get_version, 0),
-
-	VCK5000_IOCTL_DEF(AMDKFD_IOC_CREATE_QUEUE, vck5000_ioctl_create_queue,
-			  0),
-
-	VCK5000_IOCTL_DEF(AMDKFD_IOC_DESTROY_QUEUE, vck5000_ioctl_destroy_queue,
-			  0),
+static const struct vck5000_ioctl_desc amdair_ioctl_table[] = {
+	AMDAIR_IOCTL_DEF(AMDAIR_IOC_GET_VERSION, amdair_ioctl_get_version, 0),
+	AMDAIR_IOCTL_DEF(AMDAIR_IOC_DESTROY_OBJECT, amdair_ioctl_destroy_object,
+			 0),
+	AMDAIR_IOCTL_DEF(AMDAIR_IOC_CREATE_QUEUE, amdair_ioctl_create_queue, 0),
+	AMDAIR_IOCTL_DEF(AMDAIR_IOC_CREATE_MEM_REGION,
+			 amdair_ioctl_create_mem_region, 0),
 };
 
 int vck5000_chardev_init(struct pci_dev *pdev)
@@ -167,6 +201,72 @@ void vck5000_chardev_exit(void)
 	vck5000_chardev = NULL;
 }
 
+/*
+	Allocate a queue in device memory
+
+	This allocates some BRAM or DRAM and returns the base address to the caller
+	Each controller can have only one queue at the moment. Find a controller
+	that is free, and return its handle.
+
+	@device_id ID of the card/device that will use this queue
+	@owner ID of the process that created the queue
+	@depth number of entries in the queue
+*/
+static struct amdair_object *alloc_device_queue(uint32_t device_id, pid_t owner,
+						size_t depth)
+{
+	uint32_t ctrlr_idx;
+	struct amdair_object *queue;
+	struct vck5000_device *dev = get_device_by_id(device_id);
+
+	if (!dev) {
+		printk("Can't find device id %u\n", device_id);
+		return NULL;
+	}
+
+	ctrlr_idx = find_free_controller(dev);
+	if (ctrlr_idx == get_controller_count(dev)) {
+		printk("All controllers are busy\n");
+		return NULL;
+	}
+
+	mark_controller_busy(dev, ctrlr_idx, owner);
+
+	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
+	if (!queue) {
+		printk("Error allocating queue object");
+		mark_controller_free(dev, ctrlr_idx);
+		return NULL;
+	}
+
+	/* queue id is global (i.e. across all controllers) and there is only one
+		queue per controller at this time, so queue id == controller id
+	*/
+	queue->id = ctrlr_idx;
+	queue->handle = AMDAIR_CREATE_HANDLE(device_id, ctrlr_idx,
+					     AMDAIR_OBJECT_TYPE_QUEUE);
+	queue->dev = dev;
+	queue->owner = owner;
+	queue->type = AMDAIR_OBJECT_TYPE_QUEUE;
+	queue->range =
+		AMDAIR_MEM_RANGE_BRAM; /* The base address is currently hard-coded to the BRAM range */
+	queue->base = get_controller_base_address(dev, ctrlr_idx) - BRAM_PA;
+	queue->size = depth * QUEUE_ENTRY_SIZE;
+
+	/* Add it to the list of managed objects */
+	amdair_add_object(queue);
+
+	printk("Allocated queue %u with handle 0x%llx\n", queue->id,
+	       queue->handle);
+	return queue;
+}
+
+static void free_device_queue(struct amdair_object *queue)
+{
+	mark_controller_free(queue->dev, queue->id);
+	amdair_remove_object(queue->handle);
+}
+
 static long vck_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
 	uint32_t amdkfd_size;
@@ -178,12 +278,12 @@ static long vck_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	unsigned int nr = _IOC_NR(cmd);
 	int ret;
 
-	if ((nr < AMDKFD_COMMAND_START) || (nr >= AMDKFD_COMMAND_END)) {
+	if ((nr < AMDAIR_COMMAND_START) || (nr > AMDAIR_COMMAND_END)) {
 		dev_warn(vck5000_chardev, "%s invalid %u", __func__, nr);
 		return 0;
 	}
 
-	ioctl = &vck5000_ioctls[nr];
+	ioctl = &amdair_ioctl_table[nr];
 
 	amdkfd_size = _IOC_SIZE(ioctl->cmd);
 	usize = asize = _IOC_SIZE(cmd);
@@ -209,6 +309,8 @@ static long vck_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(kdata, (void __user *)arg, usize) != 0) {
 			if (kdata != stack_kdata)
 				kfree(kdata);
+			dev_warn(vck5000_chardev, "Missing data in ioctl %u",
+				 nr);
 			return -EFAULT;
 		}
 	} else if (cmd & IOC_OUT) {
@@ -232,50 +334,90 @@ static int vck_open(struct inode *node, struct file *f)
 	return 0;
 }
 
+/*
+	Called when userspace closes the handle to the driver
+	Release all queues and clean up
+*/
 static int vck_release(struct inode *node, struct file *f)
 {
 	dev_warn(vck5000_chardev, "%s", __func__);
 	return 0;
 }
 
+/*
+	The offset passed to mmap is the handle for a driver object.
+	The driver must have previously created the object, such as a queue or
+	signal, and returned the handle to the caller.
+*/
 static int vck_mmap(struct file *f, struct vm_area_struct *vma)
 {
-	struct pci_dev *pdev;
 	unsigned long pgoff = 0;
-	unsigned long bar;
+	unsigned long start, end;
 	size_t size = vma->vm_end - vma->vm_start;
-	loff_t offset = (loff_t)vma->vm_pgoff << PAGE_SHIFT;
+	uint64_t handle = (loff_t)vma->vm_pgoff << PAGE_SHIFT;
+	struct pci_dev *pdev;
 
-	pdev = dev_get_drvdata(vck5000_chardev);
+	struct amdair_object *obj = amdair_find_object_by_handle(handle);
+	if (!obj) {
+		printk("Can't find object with handle 0x%llx\n", handle);
+		return -1;
+	}
 
-	dev_warn(vck5000_chardev, "%s start %lx end %lx offset %llx", __func__,
-		 vma->vm_start, vma->vm_end, offset);
+	if (obj->owner != current->pid) {
+		printk("PID %u is trying to steal object 0x%llx!\n",
+		       current->pid, obj->handle);
+		return -1;
+	}
 
-	if (offset >= MMAP_OFFSET_BRAM) {
-		unsigned int herd_idx = 0;
-		/* the herd private memory starts at 0x1000, and is 0x1000 long for each herd controller */
-		unsigned long herd_ctlr_offset =
-			HERD_CONTROLLER_BRAM_SIZE * (1 + herd_idx);
-		bar = pci_resource_start(pdev, BRAM_BAR_INDEX) +
-		      herd_ctlr_offset;
-		size = HERD_CONTROLLER_BRAM_SIZE;
-		dev_warn(vck5000_chardev, "mapping %lx BRAM at 0x%lx to 0x%lx",
-			 size, bar, vma->vm_start);
-	} else if (offset == MMAP_OFFSET_AIE) {
+	dev_warn(vck5000_chardev,
+		 "%s start 0x%lx end 0x%lx range %u offset 0x%llx", __func__,
+		 vma->vm_start, vma->vm_end, obj->range, obj->base);
+
+	pdev = obj->dev->pdev;
+
+	switch (obj->range) {
+	case AMDAIR_MEM_RANGE_AIE:
 		if (!enable_aie) {
 			dev_warn(vck5000_chardev,
 				 "mapping AIE BAR is not enabled");
 			return -EOPNOTSUPP;
 		}
-		bar = pci_resource_start(pdev, AIE_BAR_INDEX);
-		dev_warn(vck5000_chardev, "mapping %lx AIE at 0x%lx to 0x%lx",
-			 size, bar, vma->vm_start);
-	} else {
-		bar = pci_resource_start(pdev, DRAM_BAR_INDEX) + offset;
-		dev_warn(vck5000_chardev, "mapping %lx DRAM at 0x%lx to 0x%lx",
-			 size, bar, vma->vm_start);
+		start = pci_resource_start(pdev, AIE_BAR_INDEX) + obj->base;
+		end = pci_resource_end(pdev, AIE_BAR_INDEX);
+		dev_warn(vck5000_chardev, "mapping 0x%lx AIE at 0x%lx to 0x%lx",
+			 size, start, vma->vm_start);
+		break;
+
+	case AMDAIR_MEM_RANGE_DRAM:
+		start = pci_resource_start(pdev, DRAM_BAR_INDEX) + obj->base;
+		end = pci_resource_end(pdev, DRAM_BAR_INDEX);
+		dev_warn(vck5000_chardev,
+			 "mapping 0x%lx DRAM at 0x%lx to 0x%lx", size, start,
+			 vma->vm_start);
+		break;
+
+	case AMDAIR_MEM_RANGE_BRAM:
+		start = pci_resource_start(pdev, BRAM_BAR_INDEX) + obj->base;
+		end = pci_resource_end(pdev, BRAM_BAR_INDEX);
+		dev_warn(vck5000_chardev,
+			 "mapping 0x%lx BRAM at 0x%lx to 0x%lx", size, start,
+			 vma->vm_start);
+		break;
+
+	default:
+		dev_warn(vck5000_chardev, "Unrecognized mmap range %u",
+			 obj->range);
+		return -EOPNOTSUPP;
 	}
-	pgoff = (bar >> PAGE_SHIFT);
+
+	if ((start + obj->size) >= end) {
+		dev_err(vck5000_chardev,
+			"size 0x%lx starting at 0x%lx exceeds BAR", size,
+			start);
+		return -EINVAL;
+	}
+
+	pgoff = (start >> PAGE_SHIFT);
 
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 
@@ -288,37 +430,136 @@ static int vck_mmap(struct file *f, struct vm_area_struct *vma)
 	return 0;
 }
 
-static int vck5000_ioctl_get_version(struct file *filep, void *data)
+static int amdair_ioctl_get_version(struct file *filep, void *data)
 {
-	struct kfd_ioctl_get_version_args *args = data;
+	struct amdair_get_version_args *args = data;
 
-	dev_warn(vck5000_chardev, "%s %u.%u", __func__, KFD_IOCTL_MAJOR_VERSION,
-		 KFD_IOCTL_MINOR_VERSION);
-	args->major_version = KFD_IOCTL_MAJOR_VERSION;
-	args->minor_version = KFD_IOCTL_MINOR_VERSION;
+	dev_warn(vck5000_chardev, "%s %u.%u", __func__,
+		 AMDAIR_IOCTL_MAJOR_VERSION, AMDAIR_IOCTL_MINOR_VERSION);
+	args->major_version = AMDAIR_IOCTL_MAJOR_VERSION;
+	args->minor_version = AMDAIR_IOCTL_MINOR_VERSION;
 
 	return 0;
 }
 
 /*
-	This shouldn't be used (yet) - use mmap instead
+	Destroy a previously created object
+
+	TODO: Probably a good idea to quiesce and drain queues before destroying
 */
-static int vck5000_ioctl_create_queue(struct file *filep, void *data)
+static int amdair_ioctl_destroy_object(struct file *filep, void *data)
 {
-	dev_warn(vck5000_chardev, "%s", __func__);
+	struct amdair_object *queue;
+	struct amdair_destroy_object_args *args =
+		(struct amdair_destroy_object_args *)data;
+
+	dev_warn(vck5000_chardev, "%s %llu from pid %u", __func__, args->handle,
+		 current->pid);
+
+	queue = amdair_find_object_by_handle(args->handle);
+	if (!queue) {
+		dev_warn(vck5000_chardev,
+			 "Could not find queue with handle %llu", args->handle);
+		return -EINVAL;
+	}
+
+	free_device_queue(queue);
 
 	return 0;
 }
 
 /*
-	This shouldn't be used either
+	Allocate a queue of a specified device to the pid of the caller.
+	It will create a new queue and return a handle that can be used
+	to map the memory in a later call.
 */
-static int vck5000_ioctl_destroy_queue(struct file *filp, void *data)
+static int amdair_ioctl_create_queue(struct file *filep, void *data)
 {
-	int retval = 0;
-	dev_warn(vck5000_chardev, "%s", __func__);
+	struct amdair_object *queue;
+	struct amdair_create_queue_args *args =
+		(struct amdair_create_queue_args *)data;
 
-	return retval;
+	dev_warn(vck5000_chardev, "%s from pid %u", __func__, current->pid);
+
+	if (args->ring_size & (args->ring_size - 1)) {
+		dev_warn(vck5000_chardev, "Ring size %u is not a power of 2",
+			 args->ring_size);
+		//return -EINVAL;
+	}
+
+	switch (args->queue_type) {
+	case AMDAIR_QUEUE_DEVICE:
+		queue = alloc_device_queue(args->device_id, current->pid,
+					   args->ring_size);
+		if (!queue) {
+			dev_err(vck5000_chardev,
+				"Error allocating device queue type=%u devid=%u pid=%u",
+				args->queue_type, args->device_id,
+				current->pid);
+			return -ENOMEM;
+		}
+		args->doorbell_offset = 0xbad2;
+		args->ring_base_address = queue->base;
+		args->queue_id = queue->id;
+		args->handle = queue->handle;
+		break;
+
+	default:
+		dev_err(vck5000_chardev, "Queue type %u not supported",
+			args->queue_type);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int amdair_ioctl_create_mem_region(struct file *filep, void *data)
+{
+	struct vck5000_device *dev;
+	struct amdair_object *obj;
+	struct amdair_create_mr_args *args =
+		(struct amdair_create_mr_args *)data;
+
+	dev_warn(vck5000_chardev, "%s from pid %u", __func__, current->pid);
+
+	dev = get_device_by_id(args->device_id);
+	if (!dev) {
+		printk("Can't find device id %u\n", args->device_id);
+		return -EINVAL;
+	}
+
+	if (args->region < AMDAIR_MEM_RANGE_BRAM ||
+	    args->region > AMDAIR_MEM_RANGE_AIE) {
+		printk("Invalid memory region %u\n", args->region);
+		return -EINVAL;
+	}
+
+	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
+	if (!obj) {
+		printk("Error allocating mem region object");
+		return -ENOMEM;
+	}
+
+	obj->dev = dev;
+	obj->owner = current->pid;
+	obj->range = args->region;
+	obj->base = args->start;
+	obj->size = args->size;
+
+	/*
+		create a unique handle per device & region. Note: two processes can
+		register the same region for the same device but only the first will
+		be able to map it
+	*/
+	obj->handle = AMDAIR_CREATE_HANDLE(args->device_id, args->region,
+					   AMDAIR_OBJECT_TYPE_MEM_REGION);
+
+	/* Add it to the list of managed objects */
+	amdair_add_object(obj);
+
+	args->handle = obj->handle;
+
+	return 0;
 }
 
 static int validate_aie_address(uint64_t offset, struct vck5000_device *dev)

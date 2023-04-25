@@ -5,14 +5,8 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include "chardev.h"
-
-#define MAX_HERD_CONTROLLERS 64
-
-/* Offsets into BRAM BAR */
-#define HERD_CONTROLLER_BASE_ADDR(_base, _x)                                   \
-	((((uint64_t)ioread32(_base + (_x * sizeof(uint64_t) + 4))) << 32) |   \
-	 ioread32(_base + (_x * sizeof(uint64_t) + 0)))
-#define REG_HERD_CONTROLLER_COUNT 0x208
+#include "device.h"
+#include "object.h"
 
 static const char air_dev_name[] = "amdair";
 static int dev_idx; /* linear index of managed devices */
@@ -43,6 +37,8 @@ static int __init vck5000_init(void)
 	if (enable_aie)
 		printk("%s: AIE bar access enabled\n", air_dev_name);
 
+	//init_device_list();
+
 	return pci_register_driver(&vck5000);
 }
 
@@ -57,8 +53,6 @@ static int vck5000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	int bar_mask;
 	int err;
 	struct vck5000_device *dev_priv;
-	uint32_t controller_count;
-	uint64_t controller_base;
 	uint32_t idx;
 
 	/* Enable device memory */
@@ -75,7 +69,6 @@ static int vck5000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		pci_disable_device(pdev);
 		return -ENOMEM;
 	}
-	dev_priv->mem_addr = 0xbadbeef;
 
 	/* Find all memory BARs. We are expecting 3 64-bit BARs */
 	bar_mask = pci_select_bars(pdev, IORESOURCE_MEM);
@@ -106,6 +99,11 @@ static int vck5000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	dev_warn(&pdev->dev, "bar 4: 0x%lx (0x%llx)",
 		 (unsigned long)dev_priv->bram_bar, dev_priv->bram_bar_len);
 
+	dev_priv->mem_addr = 0xbadbeef;
+	dev_priv->queue_used = 0;
+	dev_priv->pdev = pdev;
+	dev_priv->controller_count = get_controller_count(dev_priv);
+
 	/* Set driver private data */
 	pci_set_drvdata(pdev, dev_priv);
 
@@ -119,24 +117,24 @@ static int vck5000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* Query number of herd controllers */
-	controller_count =
-		ioread32(dev_priv->bram_bar + REG_HERD_CONTROLLER_COUNT);
-	if (controller_count > MAX_HERD_CONTROLLERS) {
+	if (dev_priv->controller_count > MAX_HERD_CONTROLLERS) {
 		dev_err(&pdev->dev,
 			"Number of controllers: %u exceeds maximum expected %u",
-			controller_count, MAX_HERD_CONTROLLERS);
+			dev_priv->controller_count, MAX_HERD_CONTROLLERS);
 		return -EINVAL;
 	}
 
-	dev_priv->total_controllers = controller_count;
-
 	/* Each herd controller has a private memory region */
-	for (idx = 0; idx < controller_count; idx++) {
-		controller_base =
-			HERD_CONTROLLER_BASE_ADDR(dev_priv->bram_bar, idx);
+	for (idx = 0; idx < dev_priv->controller_count; idx++) {
 		dev_warn(&pdev->dev, "Controller %u base address: 0x%llx", idx,
-			 controller_base);
+			 get_controller_base_address(dev_priv, idx));
 	}
+
+	/* take queue 0 for exclusive use by driver */
+	mark_controller_busy(dev_priv, 0, 0);
+
+	dev_priv->device_id = dev_idx;
+	add_device(dev_priv);
 
 	/* Create sysfs files for accessing AIE memory region */
 	create_aie_mem_sysfs(dev_priv, dev_idx);
@@ -153,6 +151,7 @@ static void vck5000_remove(struct pci_dev *pdev)
 	vck5000_chardev_exit();
 
 	if (dev_priv) {
+		list_del(&dev_priv->list);
 		kobject_put(&dev_priv->kobj_aie);
 		kfree(dev_priv);
 	}
