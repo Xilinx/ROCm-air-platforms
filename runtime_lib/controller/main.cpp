@@ -878,7 +878,6 @@ namespace {
 
 uint64_t shmem_base = 0x020100000000UL;
 uint64_t uart_lock_offset = 0x200;
-uint64_t base_address;
 
 bool setup;
 
@@ -911,43 +910,51 @@ void unlock_uart() {
 }
 
 int queue_create(uint32_t size, queue_t **queue, uint32_t mb_id) {
-  uint64_t queue_address[1] = {base_address + sizeof(dispatch_packet_t)};
-  uint64_t queue_base_address[1] = {
-      ALIGN(queue_address[0] + sizeof(queue_t), sizeof(dispatch_packet_t))};
+
+  // Address of the queue descriptor and corresponding ring buffer 
+  // are both indexed by mb_id
+  uintptr_t queue_address = shmem_base + MB_SHMEM_QUEUE_STRUCT_OFFSET 
+    + (sizeof(queue_t) * mb_id);
+  uintptr_t queue_buffer_base_address = shmem_base + MB_SHMEM_QUEUE_BUFFER_OFFSET 
+    + (0x1000 * mb_id);
+  uint64_t* queue_doorbell_address = (uint64_t*) (shmem_base + 
+    MB_SHMEM_DOORBELL_OFFSET + (sizeof(uint64_t) * mb_id));
+
   lock_uart(mb_id);
   air_printf("setup_queue 0x%llx, %x bytes + %d 64 byte packets\n\r",
              (void *)queue_address, sizeof(queue_t), size);
-  air_printf("base address 0x%llx\n\r", base_address);
+  air_printf("base address 0x%llx\n\r", queue_buffer_base_address);
   unlock_uart();
 
   // The address of the queue_t is stored @ shmem_base[mb_id]
-  memcpy((void *)(((uint64_t *)shmem_base) + mb_id), (void *)queue_address,
+  memcpy((void *)(((uint64_t *)shmem_base) + mb_id), (void *)&queue_address,
          sizeof(uint64_t));
 
   // Initialize the queue_t
   queue_t q;
   q.type = HSA_QUEUE_TYPE_SINGLE;
   q.features = HSA_QUEUE_FEATURE_AGENT_DISPATCH;
-
-  memcpy((void *)&q.base_address, (void *)queue_base_address, sizeof(uint64_t));
-  q.doorbell = 0xffffffffffffffffUL;
+  q.base_address = queue_buffer_base_address;
+  q.doorbell = queue_doorbell_address;
   q.size = size;
   q.reserved0 = 0;
   q.id = 0xacdc;
-
   q.read_index = 0;
   q.write_index = 0;
   q.last_doorbell = 0;
+  q.base_address_paddr = 0;
+  q.base_address_vaddr = 0;
 
-  memcpy((void *)queue_address[0], (void *)&q, sizeof(queue_t));
+  // copy the queue_t struct into the shared memory
+  memcpy((void *)queue_address, (void *)&q, sizeof(queue_t));
 
   // Invalidate the packets in the queue
   for (uint32_t idx = 0; idx < size; idx++) {
-    dispatch_packet_t *pkt = &((dispatch_packet_t *)queue_base_address[0])[idx];
+    dispatch_packet_t *pkt = &((dispatch_packet_t *)queue_buffer_base_address)[idx];
     pkt->header = HSA_PACKET_TYPE_INVALID;
   }
-
-  memcpy((void *)queue, (void *)queue_address, sizeof(uint64_t));
+  // pass back the pointer to the queue_t in shared memory
+  *queue = (queue_t*)(queue_address);
   return 0;
 }
 
@@ -1714,8 +1721,6 @@ int main() {
   int min = (user2 >> 16) & 0xff;
   int ver = (user2 >> 8) & 0xff;
 
-  // Skip over the system wide shmem area, then find your own
-  base_address = shmem_base + (1 + mb_id) * MB_SHMEM_SEGMENT_SIZE;
   uint32_t *num_mbs = (uint32_t *)(shmem_base + 0x208);
   num_mbs[0] = user1;
 
@@ -1725,6 +1730,10 @@ int main() {
     uint64_t *s = (uint64_t *)(shmem_base + MB_SHMEM_SIGNAL_OFFSET);
     for (uint64_t i = 0; i < (MB_SHMEM_SIGNAL_SIZE) / sizeof(uint64_t); i++)
       s[i] = 0;
+    s = (uint64_t *)(shmem_base + MB_SHMEM_DOORBELL_OFFSET);
+    for (uint64_t i = 0; i < (MB_SHMEM_DOORBELL_SIZE) / sizeof(uint64_t); i++)
+      s[i] = 0;
+
   }
 
   lock_uart(mb_id);
@@ -1747,12 +1756,12 @@ int main() {
 
   volatile bool done = false;
   while (!done) {
-    if (q->doorbell + 1 > q->last_doorbell) {
+    if (*(q->doorbell) + 1 > q->last_doorbell) {
       lock_uart(mb_id);
-      air_printf("Ding Dong 0x%llx\n\r", q->doorbell + 1);
+      air_printf("Ding Dong 0x%llx\n\r", *(q->doorbell) + 1);
       unlock_uart();
 
-      q->last_doorbell = q->doorbell + 1;
+      q->last_doorbell = *(q->doorbell) + 1;
 
       // process packets until we hit an invalid packet
       bool invalid = false;
