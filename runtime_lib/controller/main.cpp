@@ -919,9 +919,10 @@ int queue_create(uint32_t size, queue_t **queue, uint32_t mb_id) {
     + (0x1000 * mb_id);
   uint64_t* queue_doorbell_address = (uint64_t*) (shmem_base + 
     MB_SHMEM_DOORBELL_OFFSET + (sizeof(uint64_t) * mb_id));
+  *queue_doorbell_address = 0xffffffffffffffffUL;
 
   lock_uart(mb_id);
-  air_printf("setup_queue 0x%llx, %x bytes + %d 64 byte packets\n\r",
+  air_printf("setup_queue 0x%llx, %d bytes + %d 64 byte packets\n\r",
              (void *)queue_address, sizeof(queue_t), size);
   air_printf("base address 0x%llx\n\r", queue_buffer_base_address);
   unlock_uart();
@@ -1755,6 +1756,7 @@ int main() {
   unlock_uart();
 
   volatile bool done = false;
+
   while (!done) {
     if (*(q->doorbell) + 1 > q->last_doorbell) {
       lock_uart(mb_id);
