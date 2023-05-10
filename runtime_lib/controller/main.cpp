@@ -71,7 +71,7 @@ extern "C" {
 #define HIGH_ADDR(addr) ((addr & 0xffffffff00000000) >> 32)
 #define LOW_ADDR(addr) (addr & 0x00000000ffffffff)
 
-#define ALIGN(_x, _size) (((_x) + ((_size)-1)) & ~((_size)-1))
+#define ALIGN(_x, _size) (((_x) + (_size-1)) & ~(_size-1))
 
 #define LOGICAL_HERD_DMAS 16
 
@@ -934,19 +934,22 @@ void unlock_uart(uint32_t id) {
 #endif
 }
 
-int queue_create(uintptr_t segment_base_address, uint32_t size, queue_t **queue, uint32_t mb_id) {
-  // address of queue_t struct in shared memory
-  // offset by one dispatch packet from segment base address
-  uintptr_t queue_address = segment_base_address + sizeof(dispatch_packet_t);
-  // address of dispatch packet buffer in shared memory
-  // must be aligned to size of dispatch packet and leave room for the queue_t struct
-  uintptr_t queue_base_address = ALIGN(queue_address + sizeof(queue_t), sizeof(dispatch_packet_t));
+int queue_create(uint32_t size, queue_t **queue, uint32_t mb_id) {
+  // Address of the queue descriptor and corresponding ring buffer 
+  // are both indexed by mb_id
+  uintptr_t queue_address = shmem_base + MB_SHMEM_QUEUE_STRUCT_OFFSET
+    + (sizeof(queue_t) * mb_id);
+  uintptr_t queue_buffer_base_address = ALIGN(shmem_base + MB_SHMEM_QUEUE_BUFFER_OFFSET 
+    + (MB_PAGE_SIZE * mb_id), MB_PAGE_SIZE);
+
+  uint64_t* queue_doorbell_address = (uint64_t*) (shmem_base + 
+    MB_SHMEM_DOORBELL_OFFSET + (sizeof(uint64_t) * mb_id));
+  *queue_doorbell_address = 0xffffffffffffffffUL;
 
   lock_uart(mb_id);
-  air_printf("segment base address 0x%llx\n\r", segment_base_address);
   air_printf("queue_t @ 0x%llx, %d bytes + %d 64 byte packets\n\r",
              (void *)queue_address, sizeof(queue_t), size);
-  air_printf("dispatch packet buffer @ 0x%llx\n\r", (void *)queue_base_address);
+  air_printf("dispatch packet buffer @ 0x%llx\n\r", (void *)queue_buffer_base_address);
   unlock_uart(mb_id);
 
   // The address of the queue_t is stored @ shmem_base[mb_id]
@@ -957,8 +960,8 @@ int queue_create(uintptr_t segment_base_address, uint32_t size, queue_t **queue,
   queue_t q;
   q.type = HSA_QUEUE_TYPE_SINGLE;
   q.features = HSA_QUEUE_FEATURE_AGENT_DISPATCH;
-  q.base_address = queue_base_address;
-  q.doorbell = 0xffffffffffffffffUL;
+  q.base_address = queue_buffer_base_address;
+  q.doorbell = queue_doorbell_address;
   q.size = size;
   q.reserved0 = 0;
   q.id = 0xacdc;
@@ -973,13 +976,11 @@ int queue_create(uintptr_t segment_base_address, uint32_t size, queue_t **queue,
 
   // Invalidate the packets in the queue
   for (uint32_t idx = 0; idx < size; idx++) {
-    dispatch_packet_t *pkt = &((dispatch_packet_t *)queue_base_address)[idx];
+    dispatch_packet_t *pkt = &((dispatch_packet_t *)queue_buffer_base_address)[idx];
     pkt->header = HSA_PACKET_TYPE_INVALID;
   }
-
   // pass back the pointer to the queue_t in shared memory
   *queue = (queue_t*)(queue_address);
-
   return 0;
 }
 
@@ -1971,13 +1972,15 @@ int main() {
     for (uint64_t i = 0; i < (MB_SHMEM_SIGNAL_SIZE) / sizeof(uint64_t); i++) {
       s[i] = 0;
     }
+    s = (uint64_t *)(shmem_base + MB_SHMEM_DOORBELL_OFFSET);
+    for (uint64_t i = 0; i < (MB_SHMEM_DOORBELL_SIZE) / sizeof(uint64_t); i++) {
+      s[i] = 0;
+    }
+
     *global_barrier = 1;
   } else {
     while (!(*global_barrier)) { }
   }
-
-  // Skip over the system wide shmem area and the signals page, then find your own
-  uintptr_t segment_base_address = shmem_base + ((1 + mb_id) * MB_SHMEM_SEGMENT_SIZE);
 
   // all cores update num_mb field in shared BRAM
   // requires each core's mb_id to be accurate and mutex locks to be initialized properly
@@ -2003,7 +2006,7 @@ int main() {
 
   setup = false;
   queue_t *q = nullptr;
-  queue_create(segment_base_address, MB_QUEUE_SIZE, &q, mb_id);
+  queue_create(MB_QUEUE_SIZE, &q, mb_id);
   lock_uart(mb_id);
   xil_printf("Created queue @ 0x%p\n\r\n\r", q);
   unlock_uart(mb_id);
@@ -2013,13 +2016,14 @@ int main() {
 #endif
 
   volatile bool done = false;
+
   while (!done) {
-    if (q->doorbell + 1 > q->last_doorbell) {
+    if (*(q->doorbell) + 1 > q->last_doorbell) {
       lock_uart(mb_id);
-      air_printf("Ding Dong 0x%llx\n\r", q->doorbell + 1);
+      air_printf("Ding Dong 0x%llx\n\r", *(q->doorbell) + 1);
       unlock_uart(mb_id);
 
-      q->last_doorbell = q->doorbell + 1;
+      q->last_doorbell = *(q->doorbell) + 1;
 
       // process packets until we hit an invalid packet
       bool invalid = false;
