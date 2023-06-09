@@ -32,7 +32,7 @@ struct amdair_create_queue_args {
 	uint64_t doorbell_offset; /* out */
 	uint64_t handle; /* out: object identifer for mapping, unmapping, etc. */
 
-	uint32_t ring_size; /* in: number of entries */
+	uint32_t ring_size_bytes; /* in: ring buffer size in bytes*/
 	uint32_t device_id; /* in: which device/card consumes queue entries */
 	uint32_t queue_type; /* in: see amdair_queue_type */
 	uint32_t queue_id; /* out: globally unique queue id */

@@ -66,8 +66,6 @@ The handle is opaque to the user but is made up from deterministic parts:
 */
 #define BRAM_PA 0x20100000000ULL
 
-#define QUEUE_ENTRY_SIZE 64 /* this is probably defined somewhere else */
-
 enum aie_address_validation {
 	AIE_ADDR_OK,
 	AIE_ADDR_ALIGNMENT,
@@ -221,7 +219,7 @@ void vck5000_chardev_exit(void)
 	@depth number of entries in the queue
 */
 static struct amdair_object *alloc_device_queue(uint32_t device_id, pid_t owner,
-						size_t depth)
+						size_t ring_size_bytes)
 {
 	uint32_t ctrlr_idx;
 	struct amdair_object *queue;
@@ -259,7 +257,7 @@ static struct amdair_object *alloc_device_queue(uint32_t device_id, pid_t owner,
 	queue->range =
 		AMDAIR_MEM_RANGE_BRAM; /* The base address is currently hard-coded to the BRAM range */
 	queue->base = get_controller_base_address(dev, ctrlr_idx) - BRAM_PA;
-	queue->size = depth * QUEUE_ENTRY_SIZE;
+	queue->size = ring_size_bytes;
 
 	/* Add it to the list of managed objects */
 	amdair_add_object(queue);
@@ -487,18 +485,19 @@ static int amdair_ioctl_create_queue(struct file *filep, void *data)
 	struct amdair_create_queue_args *args =
 		(struct amdair_create_queue_args *)data;
 
-	dev_warn(vck5000_chardev, "%s from pid %u", __func__, current->pid);
+	dev_warn(vck5000_chardev, "%s from pid %u requesting queue of size %d", __func__, current->pid,
+		 args->ring_size_bytes);
 
-	if (args->ring_size & (args->ring_size - 1)) {
+	if (args->ring_size_bytes & (args->ring_size_bytes - 1)) {
 		dev_warn(vck5000_chardev, "Ring size %u is not a power of 2",
-			 args->ring_size);
-		//return -EINVAL;
+			 args->ring_size_bytes);
+		return -EINVAL;
 	}
 
 	switch (args->queue_type) {
 	case AMDAIR_QUEUE_DEVICE:
 		queue = alloc_device_queue(args->device_id, current->pid,
-					   args->ring_size);
+					   args->ring_size_bytes);
 		if (!queue) {
 			dev_err(vck5000_chardev,
 				"Error allocating device queue type=%u devid=%u pid=%u",
