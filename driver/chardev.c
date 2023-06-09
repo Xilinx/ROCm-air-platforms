@@ -157,6 +157,13 @@ static const struct vck5000_ioctl_desc amdair_ioctl_table[] = {
 			 amdair_ioctl_create_mem_region, 0),
 };
 
+static char *amdair_devnode(struct device *dev, umode_t *mode)
+{
+	if (mode)
+		*mode = 0666;
+	return NULL;
+}
+
 int vck5000_chardev_init(struct pci_dev *pdev)
 {
 	int ret = 0;
@@ -172,6 +179,7 @@ int vck5000_chardev_init(struct pci_dev *pdev)
 	if (IS_ERR(vck5000_class))
 		goto err_class;
 
+	vck5000_class->devnode = amdair_devnode;
 	vck5000_chardev =
 		device_create(vck5000_class, &pdev->dev,
 			      MKDEV(chardev_major, 0), pdev, "amdair");
