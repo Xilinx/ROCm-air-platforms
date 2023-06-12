@@ -12,47 +12,48 @@ static const char air_dev_name[] = "amdair";
 static int dev_idx; /* linear index of managed devices */
 bool enable_aie;
 
-static int vck5000_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
-static void vck5000_remove(struct pci_dev *pdev);
+static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
+static void amdair_pci_remove(struct pci_dev *pdev);
 
-static struct pci_device_id vck5000_id_table[] = { { PCI_DEVICE(0x10EE,
-								0xB034) },
-						   {
-							   0,
-						   } };
+static struct pci_device_id amdair_pci_id_table[] = {
+	{ PCI_DEVICE(0x10EE, 0xB034) },
+	{ 0, }
+};
 
-MODULE_DEVICE_TABLE(pci, vck5000_id_table);
+MODULE_DEVICE_TABLE(pci, amdair_pci_id_table);
 
 /* Driver registration structure */
-static struct pci_driver vck5000 = { .name = air_dev_name,
-				     .id_table = vck5000_id_table,
-				     .probe = vck5000_probe,
-				     .remove = vck5000_remove };
+static struct pci_driver amdair_pci_driver = {
+	.name = air_dev_name,
+	.id_table = amdair_pci_id_table,
+	.probe = amdair_pci_probe,
+	.remove = amdair_pci_remove
+};
 
 /*
 	Register the driver with the PCI subsystem
 */
-static int __init vck5000_init(void)
+static int __init amdair_init(void)
 {
 	if (enable_aie)
 		printk("%s: AIE bar access enabled\n", air_dev_name);
 
 	//init_device_list();
 
-	return pci_register_driver(&vck5000);
+	return pci_register_driver(&amdair_pci_driver);
 }
 
-static void __exit vck5000_exit(void)
+static void __exit amdair_exit(void)
 {
 	/* Unregister */
-	pci_unregister_driver(&vck5000);
+	pci_unregister_driver(&amdair_pci_driver);
 }
 
-static int vck5000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int bar_mask;
 	int err;
-	struct vck5000_device *dev_priv;
+	struct amdair_device *dev_priv;
 	uint32_t idx;
 
 	/* Enable device memory */
@@ -63,7 +64,7 @@ static int vck5000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* Allocate memory for the device private data */
-	dev_priv = kzalloc(sizeof(struct vck5000_device), GFP_KERNEL);
+	dev_priv = kzalloc(sizeof(struct amdair_device), GFP_KERNEL);
 	if (!dev_priv) {
 		dev_err(&pdev->dev, "Error allocating private data");
 		pci_disable_device(pdev);
@@ -110,7 +111,7 @@ static int vck5000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Request interrupt and set up handler */
 
 	/* set up chardev interface */
-	err = vck5000_chardev_init(pdev);
+	err = amdair_chardev_init(pdev);
 	if (err) {
 		dev_err(&pdev->dev, "Error creating char device");
 		return -EINVAL;
@@ -144,11 +145,11 @@ static int vck5000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 }
 
 /* Clean up */
-static void vck5000_remove(struct pci_dev *pdev)
+static void amdair_pci_remove(struct pci_dev *pdev)
 {
-	struct vck5000_device *dev_priv = pci_get_drvdata(pdev);
+	struct amdair_device *dev_priv = pci_get_drvdata(pdev);
 
-	vck5000_chardev_exit();
+	amdair_chardev_exit();
 
 	if (dev_priv) {
 		list_del(&dev_priv->list);
@@ -164,13 +165,13 @@ const char *amdair_dev_name(void)
 	return air_dev_name;
 }
 
-module_init(vck5000_init);
-module_exit(vck5000_exit);
+module_init(amdair_init);
+module_exit(amdair_exit);
 
 module_param(enable_aie, bool, 0644);
 MODULE_PARM_DESC(enable_aie, "Enable debug access to AIE BAR");
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("Joel Nider <joel.nider@amd.com>");
-MODULE_DESCRIPTION("VCK5000 AIR driver");
+MODULE_DESCRIPTION("AMD AIR driver");
 MODULE_VERSION("1.0");

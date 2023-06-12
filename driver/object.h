@@ -15,7 +15,7 @@ enum {
 struct amdair_object {
 	struct list_head list;
 	uint64_t handle;
-	struct vck5000_device *dev; /* device that owns the memory */
+	struct amdair_device *dev; /* device that owns the memory */
 	pid_t owner;
 	uint32_t id;
 	uint8_t type;

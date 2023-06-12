@@ -1,8 +1,8 @@
 // Copyright (C) 2023, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 
-#ifndef VCK5000_CHARDEV_H_
-#define VCK5000_CHARDEV_H_
+#ifndef AMDAIR_CHARDEV_H_
+#define AMDAIR_CHARDEV_H_
 
 #include "device.h"
 
@@ -11,10 +11,10 @@
 #define AIE_BAR_INDEX 2
 #define BRAM_BAR_INDEX 4
 
-int vck5000_chardev_init(struct pci_dev *pdev);
-void vck5000_chardev_exit(void);
-int create_aie_mem_sysfs(struct vck5000_device *priv, uint32_t index);
+int amdair_chardev_init(struct pci_dev *pdev);
+void amdair_chardev_exit(void);
+int create_aie_mem_sysfs(struct amdair_device *priv, uint32_t index);
 
 const char *amdair_dev_name(void);
 
-#endif /* VCK5000_CHARDEV_H_ */
+#endif /* AMDAIR_CHARDEV_H_ */

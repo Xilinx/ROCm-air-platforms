@@ -72,12 +72,12 @@ enum aie_address_validation {
 	AIE_ADDR_RANGE,
 };
 
-typedef int vck5000_ioctl_t(struct file *filep, void *data);
+typedef int amdair_ioctl_t(struct file *filep, void *data);
 
-struct vck5000_ioctl_desc {
+struct amdair_ioctl_desc {
 	unsigned int cmd;
 	int flags;
-	vck5000_ioctl_t *func;
+	amdair_ioctl_t *func;
 	unsigned int cmd_drv;
 	const char *name;
 };
@@ -104,10 +104,10 @@ static ssize_t value_show(struct kobject *kobj, struct attribute *attr,
 static ssize_t value_store(struct kobject *kobj, struct attribute *attr,
 			   const char *buf, size_t count);
 
-static long vck_ioctl(struct file *, unsigned int, unsigned long);
-static int vck_open(struct inode *, struct file *);
-static int vck_release(struct inode *, struct file *);
-static int vck_mmap(struct file *, struct vm_area_struct *);
+static long amdair_ioctl(struct file *, unsigned int, unsigned long);
+static int amdair_open(struct inode *, struct file *);
+static int amdair_release(struct inode *, struct file *);
+static int amdair_mmap(struct file *, struct vm_area_struct *);
 
 static int amdair_ioctl_get_version(struct file *filep, void *data);
 static int amdair_ioctl_destroy_object(struct file *filep, void *data);
@@ -132,21 +132,21 @@ struct attribute *aie_sysfs_attrs[] = { &aie_attr_address.attr,
 
 ATTRIBUTE_GROUPS(aie_sysfs);
 
-static const struct file_operations vck_fops = {
+static const struct file_operations amdair_fops = {
 	.owner = THIS_MODULE,
-	.unlocked_ioctl = vck_ioctl,
+	.unlocked_ioctl = amdair_ioctl,
 	.compat_ioctl = compat_ptr_ioctl,
-	.open = vck_open,
-	.release = vck_release,
-	.mmap = vck_mmap,
+	.open = amdair_open,
+	.release = amdair_release,
+	.mmap = amdair_mmap,
 };
 
 extern bool enable_aie;
 static int chardev_major = -1;
-static struct class *vck5000_class;
-static struct device *vck5000_chardev;
+static struct class *amdair_class;
+static struct device *amdair_chardev;
 
-static const struct vck5000_ioctl_desc amdair_ioctl_table[] = {
+static const struct amdair_ioctl_desc amdair_ioctl_table[] = {
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_GET_VERSION, amdair_ioctl_get_version, 0),
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_DESTROY_OBJECT, amdair_ioctl_destroy_object,
 			 0),
@@ -162,34 +162,34 @@ static char *amdair_devnode(struct device *dev, umode_t *mode)
 	return NULL;
 }
 
-int vck5000_chardev_init(struct pci_dev *pdev)
+int amdair_chardev_init(struct pci_dev *pdev)
 {
 	int ret = 0;
 
-	ret = register_chrdev(0, amdair_dev_name(), &vck_fops);
+	ret = register_chrdev(0, amdair_dev_name(), &amdair_fops);
 	if (ret < 0)
 		goto err_register;
 
 	chardev_major = ret;
 
-	vck5000_class = class_create(THIS_MODULE, amdair_dev_name());
-	ret = PTR_ERR(vck5000_class);
-	if (IS_ERR(vck5000_class))
+	amdair_class = class_create(THIS_MODULE, amdair_dev_name());
+	ret = PTR_ERR(amdair_class);
+	if (IS_ERR(amdair_class))
 		goto err_class;
 
-	vck5000_class->devnode = amdair_devnode;
-	vck5000_chardev =
-		device_create(vck5000_class, &pdev->dev,
+	amdair_class->devnode = amdair_devnode;
+	amdair_chardev =
+		device_create(amdair_class, &pdev->dev,
 			      MKDEV(chardev_major, 0), pdev, "amdair");
 
-	ret = PTR_ERR(vck5000_chardev);
-	if (IS_ERR(vck5000_chardev))
+	ret = PTR_ERR(amdair_chardev);
+	if (IS_ERR(amdair_chardev))
 		goto err_device;
 
 	return 0;
 
 err_device:
-	class_destroy(vck5000_class);
+	class_destroy(amdair_class);
 
 err_class:
 	unregister_chrdev(chardev_major, amdair_dev_name());
@@ -198,13 +198,13 @@ err_register:
 	return -ENODEV;
 }
 
-void vck5000_chardev_exit(void)
+void amdair_chardev_exit(void)
 {
-	device_destroy(vck5000_class, MKDEV(chardev_major, 0));
-	class_destroy(vck5000_class);
+	device_destroy(amdair_class, MKDEV(chardev_major, 0));
+	class_destroy(amdair_class);
 	unregister_chrdev(chardev_major, amdair_dev_name());
 
-	vck5000_chardev = NULL;
+	amdair_chardev = NULL;
 }
 
 /*
@@ -223,7 +223,7 @@ static struct amdair_object *alloc_device_queue(uint32_t device_id, pid_t owner,
 {
 	uint32_t ctrlr_idx;
 	struct amdair_object *queue;
-	struct vck5000_device *dev = get_device_by_id(device_id);
+	struct amdair_device *dev = get_device_by_id(device_id);
 
 	if (!dev) {
 		printk("Can't find device id %u\n", device_id);
@@ -273,19 +273,19 @@ static void free_device_queue(struct amdair_object *queue)
 	amdair_remove_object(queue->handle);
 }
 
-static long vck_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
+static long amdair_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
 	uint32_t amdkfd_size;
 	uint32_t usize, asize;
 	char stack_kdata[128];
 	char *kdata = NULL;
-	vck5000_ioctl_t *func;
-	const struct vck5000_ioctl_desc *ioctl = NULL;
+	amdair_ioctl_t *func;
+	const struct amdair_ioctl_desc *ioctl = NULL;
 	unsigned int nr = _IOC_NR(cmd);
 	int ret;
 
 	if ((nr < AMDAIR_COMMAND_START) || (nr > AMDAIR_COMMAND_END)) {
-		dev_warn(vck5000_chardev, "%s invalid %u", __func__, nr);
+		dev_warn(amdair_chardev, "%s invalid %u", __func__, nr);
 		return 0;
 	}
 
@@ -315,7 +315,7 @@ static long vck_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(kdata, (void __user *)arg, usize) != 0) {
 			if (kdata != stack_kdata)
 				kfree(kdata);
-			dev_warn(vck5000_chardev, "Missing data in ioctl %u",
+			dev_warn(amdair_chardev, "Missing data in ioctl %u",
 				 nr);
 			return -EFAULT;
 		}
@@ -334,9 +334,9 @@ static long vck_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	return ret;
 }
 
-static int vck_open(struct inode *node, struct file *f)
+static int amdair_open(struct inode *node, struct file *f)
 {
-	dev_warn(vck5000_chardev, "%s", __func__);
+	dev_warn(amdair_chardev, "%s", __func__);
 	return 0;
 }
 
@@ -344,9 +344,9 @@ static int vck_open(struct inode *node, struct file *f)
 	Called when userspace closes the handle to the driver
 	Release all queues and clean up
 */
-static int vck_release(struct inode *node, struct file *f)
+static int amdair_release(struct inode *node, struct file *f)
 {
-	dev_warn(vck5000_chardev, "%s", __func__);
+	dev_warn(amdair_chardev, "%s", __func__);
 	return 0;
 }
 
@@ -355,7 +355,7 @@ static int vck_release(struct inode *node, struct file *f)
 	The driver must have previously created the object, such as a queue or
 	signal, and returned the handle to the caller.
 */
-static int vck_mmap(struct file *f, struct vm_area_struct *vma)
+static int amdair_mmap(struct file *f, struct vm_area_struct *vma)
 {
 	unsigned long pgoff = 0;
 	unsigned long start, end;
@@ -375,7 +375,7 @@ static int vck_mmap(struct file *f, struct vm_area_struct *vma)
 		return -1;
 	}
 
-	dev_warn(vck5000_chardev,
+	dev_warn(amdair_chardev,
 		 "%s start 0x%lx end 0x%lx range %u offset 0x%llx", __func__,
 		 vma->vm_start, vma->vm_end, obj->range, obj->base);
 
@@ -384,20 +384,20 @@ static int vck_mmap(struct file *f, struct vm_area_struct *vma)
 	switch (obj->range) {
 	case AMDAIR_MEM_RANGE_AIE:
 		if (!enable_aie) {
-			dev_warn(vck5000_chardev,
+			dev_warn(amdair_chardev,
 				 "mapping AIE BAR is not enabled");
 			return -EOPNOTSUPP;
 		}
 		start = pci_resource_start(pdev, AIE_BAR_INDEX) + obj->base;
 		end = pci_resource_end(pdev, AIE_BAR_INDEX);
-		dev_warn(vck5000_chardev, "mapping 0x%lx AIE at 0x%lx to 0x%lx",
+		dev_warn(amdair_chardev, "mapping 0x%lx AIE at 0x%lx to 0x%lx",
 			 size, start, vma->vm_start);
 		break;
 
 	case AMDAIR_MEM_RANGE_DRAM:
 		start = pci_resource_start(pdev, DRAM_BAR_INDEX) + obj->base;
 		end = pci_resource_end(pdev, DRAM_BAR_INDEX);
-		dev_warn(vck5000_chardev,
+		dev_warn(amdair_chardev,
 			 "mapping 0x%lx DRAM at 0x%lx to 0x%lx", size, start,
 			 vma->vm_start);
 		break;
@@ -405,19 +405,19 @@ static int vck_mmap(struct file *f, struct vm_area_struct *vma)
 	case AMDAIR_MEM_RANGE_BRAM:
 		start = pci_resource_start(pdev, BRAM_BAR_INDEX) + obj->base;
 		end = pci_resource_end(pdev, BRAM_BAR_INDEX);
-		dev_warn(vck5000_chardev,
+		dev_warn(amdair_chardev,
 			 "mapping 0x%lx BRAM at 0x%lx to 0x%lx", size, start,
 			 vma->vm_start);
 		break;
 
 	default:
-		dev_warn(vck5000_chardev, "Unrecognized mmap range %u",
+		dev_warn(amdair_chardev, "Unrecognized mmap range %u",
 			 obj->range);
 		return -EOPNOTSUPP;
 	}
 
 	if ((start + obj->size) >= end) {
-		dev_err(vck5000_chardev,
+		dev_err(amdair_chardev,
 			"size 0x%lx starting at 0x%lx exceeds BAR", size,
 			start);
 		return -EINVAL;
@@ -440,7 +440,7 @@ static int amdair_ioctl_get_version(struct file *filep, void *data)
 {
 	struct amdair_get_version_args *args = data;
 
-	dev_warn(vck5000_chardev, "%s %u.%u", __func__,
+	dev_warn(amdair_chardev, "%s %u.%u", __func__,
 		 AMDAIR_IOCTL_MAJOR_VERSION, AMDAIR_IOCTL_MINOR_VERSION);
 	args->major_version = AMDAIR_IOCTL_MAJOR_VERSION;
 	args->minor_version = AMDAIR_IOCTL_MINOR_VERSION;
@@ -459,12 +459,12 @@ static int amdair_ioctl_destroy_object(struct file *filep, void *data)
 	struct amdair_destroy_object_args *args =
 		(struct amdair_destroy_object_args *)data;
 
-	dev_warn(vck5000_chardev, "%s %llu from pid %u", __func__, args->handle,
+	dev_warn(amdair_chardev, "%s %llu from pid %u", __func__, args->handle,
 		 current->pid);
 
 	queue = amdair_find_object_by_handle(args->handle);
 	if (!queue) {
-		dev_warn(vck5000_chardev,
+		dev_warn(amdair_chardev,
 			 "Could not find queue with handle %llu", args->handle);
 		return -EINVAL;
 	}
@@ -485,11 +485,11 @@ static int amdair_ioctl_create_queue(struct file *filep, void *data)
 	struct amdair_create_queue_args *args =
 		(struct amdair_create_queue_args *)data;
 
-	dev_warn(vck5000_chardev, "%s from pid %u requesting queue of size %d", __func__, current->pid,
+	dev_warn(amdair_chardev, "%s from pid %u requesting queue of size %d", __func__, current->pid,
 		 args->ring_size_bytes);
 
 	if (args->ring_size_bytes & (args->ring_size_bytes - 1)) {
-		dev_warn(vck5000_chardev, "Ring size %u is not a power of 2",
+		dev_warn(amdair_chardev, "Ring size %u is not a power of 2",
 			 args->ring_size_bytes);
 		return -EINVAL;
 	}
@@ -499,7 +499,7 @@ static int amdair_ioctl_create_queue(struct file *filep, void *data)
 		queue = alloc_device_queue(args->device_id, current->pid,
 					   args->ring_size_bytes);
 		if (!queue) {
-			dev_err(vck5000_chardev,
+			dev_err(amdair_chardev,
 				"Error allocating device queue type=%u devid=%u pid=%u",
 				args->queue_type, args->device_id,
 				current->pid);
@@ -512,7 +512,7 @@ static int amdair_ioctl_create_queue(struct file *filep, void *data)
 		break;
 
 	default:
-		dev_err(vck5000_chardev, "Queue type %u not supported",
+		dev_err(amdair_chardev, "Queue type %u not supported",
 			args->queue_type);
 		return -EINVAL;
 	}
@@ -522,12 +522,12 @@ static int amdair_ioctl_create_queue(struct file *filep, void *data)
 
 static int amdair_ioctl_create_mem_region(struct file *filep, void *data)
 {
-	struct vck5000_device *dev;
+	struct amdair_device *dev;
 	struct amdair_object *obj;
 	struct amdair_create_mr_args *args =
 		(struct amdair_create_mr_args *)data;
 
-	dev_warn(vck5000_chardev, "%s from pid %u", __func__, current->pid);
+	dev_warn(amdair_chardev, "%s from pid %u", __func__, current->pid);
 
 	dev = get_device_by_id(args->device_id);
 	if (!dev) {
@@ -569,7 +569,7 @@ static int amdair_ioctl_create_mem_region(struct file *filep, void *data)
 	return 0;
 }
 
-static int validate_aie_address(uint64_t offset, struct vck5000_device *dev)
+static int validate_aie_address(uint64_t offset, struct amdair_device *dev)
 {
 	/* alignment */
 	if (offset & 0x3) {
@@ -590,8 +590,8 @@ static int validate_aie_address(uint64_t offset, struct vck5000_device *dev)
 static ssize_t address_show(struct kobject *kobj, struct attribute *attr,
 			    char *buf)
 {
-	struct vck5000_device *drv_priv =
-		container_of(kobj, struct vck5000_device, kobj_aie);
+	struct amdair_device *drv_priv =
+		container_of(kobj, struct amdair_device, kobj_aie);
 
 	snprintf(buf, PAGE_SIZE, "0x%llx\n", drv_priv->mem_addr);
 	return strlen(buf) + 1;
@@ -601,8 +601,8 @@ static ssize_t address_store(struct kobject *kobj, struct attribute *attr,
 			     const char *buf, size_t count)
 {
 	unsigned long address;
-	struct vck5000_device *drv_priv =
-		container_of(kobj, struct vck5000_device, kobj_aie);
+	struct amdair_device *drv_priv =
+		container_of(kobj, struct amdair_device, kobj_aie);
 
 	kstrtoul(buf, 0, &address);
 	drv_priv->mem_addr = address;
@@ -613,8 +613,8 @@ static ssize_t value_show(struct kobject *kobj, struct attribute *attr,
 			  char *buf)
 {
 	uint32_t value;
-	struct vck5000_device *drv_priv =
-		container_of(kobj, struct vck5000_device, kobj_aie);
+	struct amdair_device *drv_priv =
+		container_of(kobj, struct amdair_device, kobj_aie);
 	uint64_t offset = drv_priv->mem_addr;
 
 	if (validate_aie_address(offset, drv_priv)) {
@@ -632,8 +632,8 @@ static ssize_t value_store(struct kobject *kobj, struct attribute *attr,
 			   const char *buf, size_t count)
 {
 	uint32_t value;
-	struct vck5000_device *drv_priv =
-		container_of(kobj, struct vck5000_device, kobj_aie);
+	struct amdair_device *drv_priv =
+		container_of(kobj, struct amdair_device, kobj_aie);
 	uint64_t offset = drv_priv->mem_addr;
 
 	if (validate_aie_address(offset, drv_priv) == AIE_ADDR_OK) {
@@ -671,14 +671,14 @@ static ssize_t aie_store(struct kobject *kobj, struct attribute *attr,
 	return air_attr->store(kobj, attr, buf, count);
 }
 
-int create_aie_mem_sysfs(struct vck5000_device *priv, uint32_t index)
+int create_aie_mem_sysfs(struct amdair_device *priv, uint32_t index)
 {
 	int err;
 
 	err = kobject_init_and_add(&priv->kobj_aie, &aie_sysfs_type,
-				   &vck5000_chardev->kobj, "%02u", index);
+				   &amdair_chardev->kobj, "%02u", index);
 	if (err) {
-		dev_err(vck5000_chardev, "Error creating sysfs device");
+		dev_err(amdair_chardev, "Error creating sysfs device");
 		kobject_put(&priv->kobj_aie);
 		return -1;
 	}

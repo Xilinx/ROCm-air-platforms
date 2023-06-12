@@ -10,14 +10,14 @@
 #define MAX_QUEUES MAX_HERD_CONTROLLERS
 
 /*
-	This represents a single VCK5000 card.
+	This represents a single Versal ACAP card.
 
 	This does not use the Linux kernel 'device' infrastructure because we want
 	to have only a single character device interface (/dev/amdair) regardless of
 	how many physical devices are attached. This follows the AMDKFD driver
 	design.
 */
-struct vck5000_device {
+struct amdair_device {
 	struct list_head list;
 	uint32_t device_id;
 	struct pci_dev *pdev;
@@ -46,14 +46,14 @@ struct vck5000_device {
 	uint64_t mem_addr; /* address for indirect memory access */
 };
 
-void add_device(struct vck5000_device *dev);
-struct vck5000_device *get_device_by_id(uint32_t device_id);
-uint32_t get_controller_count(struct vck5000_device *dev);
-uint64_t get_controller_base_address(struct vck5000_device *dev,
+void add_device(struct amdair_device *dev);
+struct amdair_device *get_device_by_id(uint32_t device_id);
+uint32_t get_controller_count(struct amdair_device *dev);
+uint64_t get_controller_base_address(struct amdair_device *dev,
 				     uint32_t ctrlr_idx);
-uint32_t find_free_controller(struct vck5000_device *dev);
-void mark_controller_busy(struct vck5000_device *dev, uint32_t ctrlr_idx,
+uint32_t find_free_controller(struct amdair_device *dev);
+void mark_controller_busy(struct amdair_device *dev, uint32_t ctrlr_idx,
 			  pid_t pid);
-void mark_controller_free(struct vck5000_device *dev, uint32_t ctrlr_idx);
+void mark_controller_free(struct amdair_device *dev, uint32_t ctrlr_idx);
 
 #endif /* DEVICE_H_ */

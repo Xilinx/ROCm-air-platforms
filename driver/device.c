@@ -12,14 +12,14 @@
 
 LIST_HEAD(device_list);
 
-void add_device(struct vck5000_device *dev)
+void add_device(struct amdair_device *dev)
 {
 	list_add_tail(&dev->list, &device_list);
 }
 
-struct vck5000_device *get_device_by_id(uint32_t device_id)
+struct amdair_device *get_device_by_id(uint32_t device_id)
 {
-	struct vck5000_device *dev;
+	struct amdair_device *dev;
 	list_for_each_entry (dev, &device_list, list) {
 		if (dev->device_id == device_id)
 			return dev;
@@ -31,7 +31,7 @@ struct vck5000_device *get_device_by_id(uint32_t device_id)
 /*
 	How many controllers are available in this device
 */
-uint32_t get_controller_count(struct vck5000_device *dev)
+uint32_t get_controller_count(struct amdair_device *dev)
 {
 	return ioread32(dev->bram_bar + REG_HERD_CONTROLLER_COUNT);
 }
@@ -39,7 +39,7 @@ uint32_t get_controller_count(struct vck5000_device *dev)
 /*
 	Read the address that the controller is polling on
 */
-uint64_t get_controller_base_address(struct vck5000_device *dev,
+uint64_t get_controller_base_address(struct amdair_device *dev,
 				     uint32_t ctrlr_idx)
 {
 	return HERD_CONTROLLER_BASE_ADDR(dev->bram_bar, ctrlr_idx);
@@ -50,7 +50,7 @@ uint64_t get_controller_base_address(struct vck5000_device *dev,
 	queue allocated yet. Return the total number of controllers if there are
 	none free.
 */
-uint32_t find_free_controller(struct vck5000_device *dev)
+uint32_t find_free_controller(struct amdair_device *dev)
 {
 	uint32_t idx;
 
@@ -68,7 +68,7 @@ uint32_t find_free_controller(struct vck5000_device *dev)
 	When controllers can handle more than a single queue, these functions
 	will be removed
 */
-void mark_controller_busy(struct vck5000_device *dev, uint32_t ctrlr_idx,
+void mark_controller_busy(struct amdair_device *dev, uint32_t ctrlr_idx,
 			  pid_t pid)
 {
 	if (dev->queue_used & (1ULL << ctrlr_idx)) {
@@ -79,7 +79,7 @@ void mark_controller_busy(struct vck5000_device *dev, uint32_t ctrlr_idx,
 	dev->queue_owner[ctrlr_idx] = pid;
 }
 
-void mark_controller_free(struct vck5000_device *dev, uint32_t ctrlr_idx)
+void mark_controller_free(struct amdair_device *dev, uint32_t ctrlr_idx)
 {
 	if (!(dev->queue_used & (1ULL << ctrlr_idx))) {
 		printk("Controller %u is not busy!\n", ctrlr_idx);

@@ -1,4 +1,4 @@
-# VCK5000 AIR Driver
+# AMD AIR Driver
 
 This is a Linux kernel driver to manage the VCK5000 PCIe card. It exposes a
 character device /dev/amdair for interfacing with user space applications.
