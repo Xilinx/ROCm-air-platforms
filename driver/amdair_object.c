@@ -3,7 +3,8 @@
 
 #include <linux/list.h>
 #include <linux/slab.h>
-#include "object.h"
+
+#include "amdair_object.h"
 
 LIST_HEAD(object_list);
 

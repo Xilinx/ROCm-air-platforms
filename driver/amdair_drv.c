@@ -5,9 +5,9 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 
-#include "chardev.h"
+#include "amdair_chardev.h"
 #include "amdair_device.h"
-#include "object.h"
+#include "amdair_object.h"
 
 static const char air_dev_name[] = "amdair";
 static int dev_idx; /* linear index of managed devices */

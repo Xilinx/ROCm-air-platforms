@@ -19,9 +19,10 @@
 #include <linux/fdtable.h>
 #include <linux/processor.h>
 #include <linux/pci.h>
-#include "chardev.h"
+
+#include "amdair_chardev.h"
 #include "amdair_ioctl.h"
-#include "object.h"
+#include "amdair_object.h"
 
 /*
 	Define an entry in the ioctl table
