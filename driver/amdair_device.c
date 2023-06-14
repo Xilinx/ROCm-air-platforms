@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include <linux/module.h>
-#include "device.h"
+#include <linux/pci.h>
+
+#include "amdair_device.h"
 
 /* Offsets into 'info page' in BRAM */
 #define REG_HERD_CONTROLLER_COUNT 0x208
@@ -11,6 +13,37 @@
 	 ioread32(_base + (_x * sizeof(uint64_t) + 0)))
 
 LIST_HEAD(device_list);
+
+int amdair_device_init(struct amdair_device *air_dev)
+{
+	struct pci_dev *pdev;
+
+	if (!air_dev)
+		return -EINVAL;
+
+	pdev = air_dev->pdev;
+	air_dev->dram_bar = pcim_iomap_table(pdev)[DRAM_BAR_INDEX];
+	air_dev->aie_bar = pcim_iomap_table(pdev)[AIE_BAR_INDEX];
+	air_dev->bram_bar = pcim_iomap_table(pdev)[BRAM_BAR_INDEX];
+	air_dev->dram_bar_len = pci_resource_len(pdev, DRAM_BAR_INDEX);
+	air_dev->aie_bar_len = pci_resource_len(pdev, AIE_BAR_INDEX);
+	air_dev->bram_bar_len = pci_resource_len(pdev, BRAM_BAR_INDEX);
+	dev_info(&pdev->dev, "bar 0: 0x%lx (0x%llx)",
+		 (unsigned long)air_dev->dram_bar, air_dev->dram_bar_len);
+	dev_info(&pdev->dev, "bar 2: 0x%lx (0x%llx)",
+		 (unsigned long)air_dev->aie_bar, air_dev->aie_bar_len);
+	dev_info(&pdev->dev, "bar 4: 0x%lx (0x%llx)",
+		 (unsigned long)air_dev->bram_bar, air_dev->bram_bar_len);
+
+	air_dev->mem_addr = 0xbadbeef;
+	air_dev->queue_used = 0;
+	air_dev->controller_count = get_controller_count(air_dev);
+
+	/* Take queue 0 for exclusive use by the driver */
+	mark_controller_busy(air_dev, 0, 0);
+
+	return 0;
+}
 
 void add_device(struct amdair_device *dev)
 {

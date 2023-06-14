@@ -4,12 +4,7 @@
 #ifndef AMDAIR_CHARDEV_H_
 #define AMDAIR_CHARDEV_H_
 
-#include "device.h"
-
-/* The indices in config space (64-bit BARs) */
-#define DRAM_BAR_INDEX 0
-#define AIE_BAR_INDEX 2
-#define BRAM_BAR_INDEX 4
+#include "amdair_device.h"
 
 int amdair_chardev_init(struct pci_dev *pdev);
 void amdair_chardev_exit(void);

@@ -4,8 +4,9 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+
 #include "chardev.h"
-#include "device.h"
+#include "amdair_device.h"
 #include "object.h"
 
 static const char air_dev_name[] = "amdair";
@@ -51,25 +52,26 @@ static void __exit amdair_exit(void)
 
 static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
+	struct amdair_device *air_dev;
+	int ret;
 	int bar_mask;
-	int err;
-	struct amdair_device *dev_priv;
 	uint32_t idx;
 
-	/* Enable device memory */
-	err = pcim_enable_device(pdev);
-	if (err) {
-		dev_err(&pdev->dev, "Can't enable device memory");
-		return err;
+	/* Allocate memory for the device private data */
+	air_dev = kzalloc(sizeof(struct amdair_device), GFP_KERNEL);
+	if (!air_dev) {
+		dev_err(&pdev->dev, "Error allocating AIR device");
+		ret = -ENOMEM;
 	}
 
-	/* Allocate memory for the device private data */
-	dev_priv = kzalloc(sizeof(struct amdair_device), GFP_KERNEL);
-	if (!dev_priv) {
-		dev_err(&pdev->dev, "Error allocating private data");
-		pci_disable_device(pdev);
-		return -ENOMEM;
+	/* Enable device memory */
+	ret = pcim_enable_device(pdev);
+	if (ret) {
+		dev_err(&pdev->dev, "Can't enable device memory");
+		goto err_free;
 	}
+
+	air_dev->pdev = pdev;
 
 	/* Find all memory BARs. We are expecting 3 64-bit BARs */
 	bar_mask = pci_select_bars(pdev, IORESOURCE_MEM);
@@ -77,84 +79,72 @@ static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *en
 		dev_err(&pdev->dev,
 			"These are not the bars we're looking for: 0x%x",
 			bar_mask);
-		pci_disable_device(pdev);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err_pci;
 	}
 
-	err = pcim_iomap_regions_request_all(pdev, bar_mask, air_dev_name);
-	if (err) {
+	ret = pcim_iomap_regions_request_all(pdev, bar_mask, air_dev_name);
+	if (ret) {
 		dev_err(&pdev->dev, "Can't get memory region for bars");
-		// pci_disable_device(pdev);
-		return err;
+		goto err_pci;
 	}
-	dev_priv->dram_bar = pcim_iomap_table(pdev)[DRAM_BAR_INDEX];
-	dev_priv->aie_bar = pcim_iomap_table(pdev)[AIE_BAR_INDEX];
-	dev_priv->bram_bar = pcim_iomap_table(pdev)[BRAM_BAR_INDEX];
-	dev_priv->dram_bar_len = pci_resource_len(pdev, DRAM_BAR_INDEX);
-	dev_priv->aie_bar_len = pci_resource_len(pdev, AIE_BAR_INDEX);
-	dev_priv->bram_bar_len = pci_resource_len(pdev, BRAM_BAR_INDEX);
-	dev_warn(&pdev->dev, "bar 0: 0x%lx (0x%llx)",
-		 (unsigned long)dev_priv->dram_bar, dev_priv->dram_bar_len);
-	dev_warn(&pdev->dev, "bar 2: 0x%lx (0x%llx)",
-		 (unsigned long)dev_priv->aie_bar, dev_priv->aie_bar_len);
-	dev_warn(&pdev->dev, "bar 4: 0x%lx (0x%llx)",
-		 (unsigned long)dev_priv->bram_bar, dev_priv->bram_bar_len);
 
-	dev_priv->mem_addr = 0xbadbeef;
-	dev_priv->queue_used = 0;
-	dev_priv->pdev = pdev;
-	dev_priv->controller_count = get_controller_count(dev_priv);
+	amdair_device_init(air_dev);
 
 	/* Set driver private data */
-	pci_set_drvdata(pdev, dev_priv);
+	pci_set_drvdata(pdev, air_dev);
 
-	/* Request interrupt and set up handler */
-
-	/* set up chardev interface */
-	err = amdair_chardev_init(pdev);
-	if (err) {
+	/* Set up chardev interface */
+	ret = amdair_chardev_init(pdev);
+	if (ret) {
 		dev_err(&pdev->dev, "Error creating char device");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_pci;
 	}
 
 	/* Query number of herd controllers */
-	if (dev_priv->controller_count > MAX_HERD_CONTROLLERS) {
+	if (air_dev->controller_count > MAX_HERD_CONTROLLERS) {
 		dev_err(&pdev->dev,
 			"Number of controllers: %u exceeds maximum expected %u",
-			dev_priv->controller_count, MAX_HERD_CONTROLLERS);
-		return -EINVAL;
+			air_dev->controller_count, MAX_HERD_CONTROLLERS);
+		ret = -EINVAL;
+		goto err_pci;
 	}
 
 	/* Each herd controller has a private memory region */
-	for (idx = 0; idx < dev_priv->controller_count; idx++) {
-		dev_warn(&pdev->dev, "Controller %u base address: 0x%llx", idx,
-			 get_controller_base_address(dev_priv, idx));
+	for (idx = 0; idx < air_dev->controller_count; idx++) {
+		dev_info(&pdev->dev, "Controller %u base address: 0x%llx", idx,
+			 get_controller_base_address(air_dev, idx));
 	}
 
-	/* take queue 0 for exclusive use by driver */
-	mark_controller_busy(dev_priv, 0, 0);
-
-	dev_priv->device_id = dev_idx;
-	add_device(dev_priv);
+	air_dev->device_id = dev_idx;
+	add_device(air_dev);
 
 	/* Create sysfs files for accessing AIE memory region */
-	create_aie_mem_sysfs(dev_priv, dev_idx);
+	create_aie_mem_sysfs(air_dev, dev_idx);
 	dev_idx++;
 
 	return 0;
+
+err_pci:
+	pci_disable_device(pdev);
+err_free:
+	kfree(air_dev);
+
+	return ret;
 }
 
 /* Clean up */
 static void amdair_pci_remove(struct pci_dev *pdev)
 {
-	struct amdair_device *dev_priv = pci_get_drvdata(pdev);
+	struct amdair_device *air_dev = pci_get_drvdata(pdev);
 
 	amdair_chardev_exit();
 
-	if (dev_priv) {
-		list_del(&dev_priv->list);
-		kobject_put(&dev_priv->kobj_aie);
-		kfree(dev_priv);
+	if (air_dev) {
+		list_del(&air_dev->list);
+		kobject_put(&air_dev->kobj_aie);
+		kfree(air_dev);
 	}
 
 	dev_warn(&pdev->dev, "removed");

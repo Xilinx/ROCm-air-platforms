@@ -1,8 +1,13 @@
 // Copyright (C) 2023, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: GPL-2.0
 
-#ifndef DEVICE_H_
-#define DEVICE_H_
+#ifndef AMDAIR_DEVICE_H_
+#define AMDAIR_DEVICE_H_
+
+/* The indices in config space (64-bit BARs) */
+#define DRAM_BAR_INDEX 0
+#define AIE_BAR_INDEX 2
+#define BRAM_BAR_INDEX 4
 
 #define MAX_HERD_CONTROLLERS 64
 
@@ -46,6 +51,7 @@ struct amdair_device {
 	uint64_t mem_addr; /* address for indirect memory access */
 };
 
+int amdair_device_init(struct amdair_device *air_dev);
 void add_device(struct amdair_device *dev);
 struct amdair_device *get_device_by_id(uint32_t device_id);
 uint32_t get_controller_count(struct amdair_device *dev);
@@ -56,4 +62,4 @@ void mark_controller_busy(struct amdair_device *dev, uint32_t ctrlr_idx,
 			  pid_t pid);
 void mark_controller_free(struct amdair_device *dev, uint32_t ctrlr_idx);
 
-#endif /* DEVICE_H_ */
+#endif /* AMDAIR_DEVICE_H_ */
