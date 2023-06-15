@@ -23,6 +23,7 @@
 #include "amdair_chardev.h"
 #include "amdair_ioctl.h"
 #include "amdair_object.h"
+#include "amdair_process.h"
 
 /*
 	Define an entry in the ioctl table
@@ -335,19 +336,37 @@ static long amdair_ioctl(struct file *filep, unsigned int cmd, unsigned long arg
 	return ret;
 }
 
-static int amdair_open(struct inode *node, struct file *f)
+static int amdair_open(struct inode *node, struct file *filp)
 {
-	dev_warn(amdair_chardev, "%s", __func__);
-	return 0;
+	struct amdair_process *air_process = NULL;
+	int ret = 0;
+
+	dev_info(amdair_chardev, "%s", __func__);
+
+	ret = amdair_process_create(current, air_process);
+
+	if (ret)
+		goto err_process_create;
+	
+	filp->private_data = air_process;
+
+err_process_create:
+	return ret;
 }
 
 /*
 	Called when userspace closes the handle to the driver
 	Release all queues and clean up
 */
-static int amdair_release(struct inode *node, struct file *f)
+static int amdair_release(struct inode *node, struct file *filp)
 {
-	dev_warn(amdair_chardev, "%s", __func__);
+	struct amdair_process *air_process = filp->private_data;
+
+	dev_info(amdair_chardev, "%s", __func__);
+
+	if (air_process)
+		kfree(air_process);
+
 	return 0;
 }
 

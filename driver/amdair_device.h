@@ -4,15 +4,29 @@
 #ifndef AMDAIR_DEVICE_H_
 #define AMDAIR_DEVICE_H_
 
+#include <linux/kobject.h>
+
 /* The indices in config space (64-bit BARs) */
 #define DRAM_BAR_INDEX 0
 #define AIE_BAR_INDEX 2
 #define BRAM_BAR_INDEX 4
 
+#define MAX_AIE_INSTANCE 1
+
 #define MAX_HERD_CONTROLLERS 64
 
 /* For now, there is a 1:1 relationship between queues and controllers */
 #define MAX_QUEUES MAX_HERD_CONTROLLERS
+
+/**
+ * struct amdair_aie_info - Structure holding all instances of AIE devices.
+ */
+struct amdair_aie_info {
+	struct amdair_device *aie_instance[MAX_AIE_INSTANCE];
+	int num_aies;
+};
+
+extern struct amdair_aie_info aie_info;
 
 /*
 	This represents a single Versal ACAP card.
@@ -23,10 +37,10 @@
 	design.
 */
 struct amdair_device {
-	struct list_head list;
-	uint32_t device_id;
 	struct pci_dev *pdev;
 	struct kobject kobj_aie;
+
+	uint32_t device_id;
 
 	void __iomem *dram_bar;
 	uint64_t dram_bar_len;
@@ -52,7 +66,7 @@ struct amdair_device {
 };
 
 int amdair_device_init(struct amdair_device *air_dev);
-void add_device(struct amdair_device *dev);
+void amdair_register_aie_instance(struct amdair_device *dev);
 struct amdair_device *get_device_by_id(uint32_t device_id);
 uint32_t get_controller_count(struct amdair_device *dev);
 uint64_t get_controller_base_address(struct amdair_device *dev,

@@ -10,7 +10,6 @@
 #include "amdair_object.h"
 
 static const char air_dev_name[] = "amdair";
-static int dev_idx; /* linear index of managed devices */
 bool enable_aie;
 
 static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
@@ -117,12 +116,8 @@ static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *en
 			 get_controller_base_address(air_dev, idx));
 	}
 
-	air_dev->device_id = dev_idx;
-	add_device(air_dev);
-
 	/* Create sysfs files for accessing AIE memory region */
-	create_aie_mem_sysfs(air_dev, dev_idx);
-	dev_idx++;
+	create_aie_mem_sysfs(air_dev, air_dev->device_id);
 
 	return 0;
 
@@ -142,7 +137,6 @@ static void amdair_pci_remove(struct pci_dev *pdev)
 	amdair_chardev_exit();
 
 	if (air_dev) {
-		list_del(&air_dev->list);
 		kobject_put(&air_dev->kobj_aie);
 		kfree(air_dev);
 	}

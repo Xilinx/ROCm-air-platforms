@@ -12,7 +12,9 @@
 	((((uint64_t)ioread32(_base + (_x * sizeof(uint64_t) + 4))) << 32) |   \
 	 ioread32(_base + (_x * sizeof(uint64_t) + 0)))
 
-LIST_HEAD(device_list);
+struct amdair_aie_info aie_info = {
+	.num_aies = 0
+};
 
 int amdair_device_init(struct amdair_device *air_dev)
 {
@@ -42,23 +44,26 @@ int amdair_device_init(struct amdair_device *air_dev)
 	/* Take queue 0 for exclusive use by the driver */
 	mark_controller_busy(air_dev, 0, 0);
 
+	amdair_register_aie_instance(air_dev);
+
 	return 0;
 }
 
-void add_device(struct amdair_device *dev)
+void amdair_register_aie_instance(struct amdair_device *air_dev)
 {
-	list_add_tail(&dev->list, &device_list);
+	if (!air_dev || aie_info.num_aies >= MAX_AIE_INSTANCE)
+		return;
+	dev_info(&air_dev->pdev->dev, "Adding AIE %d\n", aie_info.num_aies);
+	aie_info.aie_instance[aie_info.num_aies] = air_dev;
+	air_dev->device_id = aie_info.num_aies;
+	aie_info.num_aies++;
 }
 
 struct amdair_device *get_device_by_id(uint32_t device_id)
 {
-	struct amdair_device *dev;
-	list_for_each_entry (dev, &device_list, list) {
-		if (dev->device_id == device_id)
-			return dev;
-	}
-
-	return NULL;
+	if (device_id >= aie_info.num_aies || device_id >= MAX_AIE_INSTANCE)
+		return NULL;
+	return aie_info.aie_instance[device_id];
 }
 
 /*
