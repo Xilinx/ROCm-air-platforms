@@ -7,6 +7,7 @@
 
 #include "amdair_chardev.h"
 #include "amdair_device.h"
+#include "amdair_device_type.h"
 #include "amdair_object.h"
 
 static const char air_dev_name[] = "amdair";
@@ -16,7 +17,7 @@ static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *en
 static void amdair_pci_remove(struct pci_dev *pdev);
 
 static struct pci_device_id amdair_pci_id_table[] = {
-	{ PCI_DEVICE(0x10EE, 0xB034) },
+	{ PCI_DEVICE(0x10EE, 0xB034), .driver_data = AMDAIR_DEV_VCK5000 },
 	{ 0, }
 };
 
@@ -38,8 +39,6 @@ static int __init amdair_init(void)
 	if (enable_aie)
 		printk("%s: AIE bar access enabled\n", air_dev_name);
 
-	//init_device_list();
-
 	return pci_register_driver(&amdair_pci_driver);
 }
 
@@ -51,16 +50,17 @@ static void __exit amdair_exit(void)
 
 static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	struct amdair_device *air_dev;
-	int ret;
-	int bar_mask;
-	uint32_t idx;
+	struct amdair_device *air_dev = NULL;
+	enum amdair_device_type device_type = ent->driver_data;
+	int ret = 0;
+	int bar_mask = 0;
 
 	/* Allocate memory for the device private data */
 	air_dev = kzalloc(sizeof(struct amdair_device), GFP_KERNEL);
 	if (!air_dev) {
 		dev_err(&pdev->dev, "Error allocating AIR device");
 		ret = -ENOMEM;
+		goto err_no_mem;
 	}
 
 	/* Enable device memory */
@@ -88,7 +88,10 @@ static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *en
 		goto err_pci;
 	}
 
-	amdair_device_init(air_dev);
+	ret = amdair_device_init(air_dev, device_type);
+
+	if (ret)
+		goto err_pci;
 
 	/* Set driver private data */
 	pci_set_drvdata(pdev, air_dev);
@@ -101,19 +104,13 @@ static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *en
 		goto err_pci;
 	}
 
-	/* Query number of herd controllers */
-	if (air_dev->controller_count > MAX_HERD_CONTROLLERS) {
+	/* Check the number of AQL queues */
+	if (air_dev->queue_mgr.num_hw_queues > MAX_HW_QUEUES) {
 		dev_err(&pdev->dev,
-			"Number of controllers: %u exceeds maximum expected %u",
-			air_dev->controller_count, MAX_HERD_CONTROLLERS);
+			"Number of queues: %u exceeds maximum expected %u",
+			air_dev->queue_mgr.num_hw_queues, MAX_HW_QUEUES);
 		ret = -EINVAL;
 		goto err_pci;
-	}
-
-	/* Each herd controller has a private memory region */
-	for (idx = 0; idx < air_dev->controller_count; idx++) {
-		dev_info(&pdev->dev, "Controller %u base address: 0x%llx", idx,
-			 get_controller_base_address(air_dev, idx));
 	}
 
 	/* Create sysfs files for accessing AIE memory region */
@@ -125,7 +122,7 @@ err_pci:
 	pci_disable_device(pdev);
 err_free:
 	kfree(air_dev);
-
+err_no_mem:
 	return ret;
 }
 

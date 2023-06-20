@@ -12,12 +12,12 @@
  * @process: The process that owns process-specific information associated with
  *	     the device.
  * @doorbell_index: The process' index into the device's doorbell aperture.
+ *                  Specifies which doorbell page is allocated to the process.
  */
 struct amdair_process_device {
 	struct amdair_device *dev;
 	struct amdair_process *process;
-	/* Processes index into the device's doorbell aperture. */
-	uint32_t doorbell_index;
+	int doorbell_idx;
 };
 
 /**
@@ -26,7 +26,8 @@ struct amdair_process_device {
  *	      this process.
  */
 struct amdair_process {
-	struct amdair_process_device *proc_dev[MAX_AIE_INSTANCE];
+	struct amdair_process_device proc_dev[MAX_AIE_INSTANCE];
+	int num_proc_devs;
 };
 
 int amdair_process_create(const struct task_struct *process,

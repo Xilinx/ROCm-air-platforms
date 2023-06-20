@@ -13,14 +13,13 @@ struct amdair_get_version_args {
 };
 
 enum amdair_mem_range {
-	AMDAIR_MEM_RANGE_LOCAL,
-	AMDAIR_MEM_RANGE_BRAM,
+	AMDAIR_MEM_RANGE_BRAM = 0,
 	AMDAIR_MEM_RANGE_DRAM,
-	AMDAIR_MEM_RANGE_AIE,
+	AMDAIR_MEM_RANGE_AIE
 };
 
 enum amdair_queue_type {
-	AMDAIR_QUEUE_DEVICE, /* queue is in device memory */
+	AMDAIR_QUEUE_DEVICE = 0 /* queue is in device memory */
 };
 
 struct amdair_destroy_object_args {
@@ -30,6 +29,8 @@ struct amdair_destroy_object_args {
 struct amdair_create_queue_args {
 	uint64_t ring_base_address; /* in: virtual address of ring entries */
 	uint64_t doorbell_offset; /* out */
+	uint64_t queue_offset; /* out */
+	uint64_t queue_buf_offset; /* out */
 	uint64_t handle; /* out: object identifer for mapping, unmapping, etc. */
 
 	uint32_t ring_size_bytes; /* in: ring buffer size in bytes*/

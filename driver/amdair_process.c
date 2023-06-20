@@ -20,6 +20,8 @@ int amdair_process_create(const struct task_struct *process,
 		goto err_alloc_process;
 	}
 
+	air_process->num_proc_devs = 0;
+
 	ret = amdair_process_create_process_device(air_process);
 
 	if (ret)
@@ -36,30 +38,25 @@ err_alloc_process:
 int amdair_process_create_process_device(struct amdair_process *air_process)
 {
 	struct amdair_device *air_dev = NULL;
-	struct amdair_process_device *air_proc_dev = NULL;
 	int i = 0;
 	int ret = 0;
 
 	if (!air_process)
 		return -EINVAL;
 
-	air_proc_dev = kzalloc(sizeof(struct amdair_process_device),
-			       GFP_KERNEL);
-
-	if (!air_proc_dev)
-		return -ENOMEM;
-	
-	for (i = 0; i < aie_info.num_aies; ++i) {
+	for (i = 0; i < aie_info.num_aie_devs; ++i) {
 		air_dev = aie_info.aie_instance[i];
 		if (!air_dev) {
 			ret = -ENODEV;
 			goto err_no_dev;
 		}
+		air_process->proc_dev[i].dev = air_dev;
+		air_process->proc_dev[i].doorbell_idx = -1;
+		air_process->num_proc_devs++;
 	}
 
 	return 0;
 
 err_no_dev:
-	kfree(air_proc_dev);
 	return ret;
 }
