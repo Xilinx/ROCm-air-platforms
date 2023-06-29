@@ -1,7 +1,7 @@
 #ifndef VCK5000_REGS_H_
 #define VCK5000_REGS_H_
 
-#define VERSION REG		0
+#define VERSION_REG		0
 #define NUM_QUEUES_REG		4
 #define QUEUE_DESC_OFFSET_REG	16
 #define QUEUE_DESC_SIZE_REG	20
