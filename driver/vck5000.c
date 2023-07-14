@@ -55,18 +55,19 @@ static void vck5000_init_doorbells(struct amdair_device *air_dev)
 	air_dev->doorbell.num_db_pages = doorbell_size / PAGE_SIZE;
 	air_dev->doorbell.base = air_dev->bram_base + doorbell_off;
 	air_dev->doorbell.size = doorbell_size;
-	air_dev->doorbell.kernel_id = 0;
-	bitmap_fill(air_dev->doorbell.id_map, MAX_HW_DOORBELL_PAGES);
-	bitmap_clear(air_dev->doorbell.id_map, 0,
+	air_dev->doorbell.kernel_page_id = 0;
+	bitmap_fill(air_dev->doorbell.page_id_map, MAX_HW_DOORBELL_PAGES);
+	bitmap_clear(air_dev->doorbell.page_id_map, 0,
 		     air_dev->doorbell.num_db_pages);
 
 	/* Reserve kernel queue's doorbell up front. */
-	set_bit(air_dev->doorbell.kernel_id, air_dev->doorbell.id_map);
+	set_bit(air_dev->doorbell.kernel_page_id,
+		air_dev->doorbell.page_id_map);
 
 	dev_info(&air_dev->pdev->dev,
 		 "VCK5000: Initializing doorbells, addr %llx, size %llx, "
 		 "doorbell map %lx, num db pages %d", air_dev->doorbell.base,
-		 air_dev->doorbell.size, *air_dev->doorbell.id_map,
+		 air_dev->doorbell.size, *air_dev->doorbell.page_id_map,
 		 air_dev->doorbell.num_db_pages);
 }
 

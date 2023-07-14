@@ -231,8 +231,12 @@ static long amdair_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	unsigned int nr = _IOC_NR(cmd);
 	int ret;
 
+	if (!air_process) {
+		return -EINVAL;
+	}
+
 	if ((nr < AMDAIR_COMMAND_START) || (nr > AMDAIR_COMMAND_END)) {
-		dev_warn(amdair_chardev, "%s invalid %u", __func__, nr);
+		dev_err(amdair_chardev, "%s invalid %u", __func__, nr);
 		return 0;
 	}
 
@@ -287,8 +291,7 @@ static int amdair_open(struct inode *node, struct file *filp)
 	int ret = 0;
 
 	dev_info(amdair_chardev, "%s", __func__);
-
-	ret = amdair_process_create(current, air_process);
+	ret = amdair_process_create(current, &air_process);
 
 	if (ret)
 		goto err_process_create;
@@ -322,6 +325,8 @@ static int amdair_release(struct inode *node, struct file *filp)
 */
 static int amdair_mmap(struct file *filp, struct vm_area_struct *vma)
 {
+	struct amdair_process *air_process = filp->private_data;
+	struct amdair_process_device *air_proc_dev = NULL;
 	struct pci_dev *pdev = NULL;
 	struct amdair_device *air_dev = NULL;
 	struct amdair_object *obj = NULL;
@@ -338,14 +343,20 @@ static int amdair_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	pdev = air_dev->pdev;
 
+	ret = amdair_process_get_process_device(air_process, dev_id,
+						&air_proc_dev);
+	if (ret)
+		return ret;
+
 	switch (AMDAIR_MMAP_GET_TYPE(mmap_offset)) {
 	case AMDAIR_MMAP_TYPE_DOORBELL:
-		start = air_dev->doorbell.base;
-		end = air_dev->doorbell.base + size;
+		start = air_dev->doorbell.base
+			+ air_proc_dev->db_page_id * PAGE_SIZE;
+		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_QUEUE:
 		start = air_dev->queue_mgr.queue_base;
-		end = air_dev->queue_mgr.queue_base + size;
+		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_QUEUE_BUF:
 		start = air_dev->queue_mgr.queue_buf_base;
@@ -473,7 +484,7 @@ static int amdair_ioctl_destroy_object(struct file *filp, void *data,
  * Allocate a queue of a specified device to the calling process. It will
  * allocate a HW queue and return an offset that can be used to map the memory
  * in a later call.
-*/
+ */
 static int amdair_ioctl_create_queue(struct file *filp, void *data,
 				     struct amdair_process *air_process)
 {
@@ -481,6 +492,10 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 	struct amdair_device *air_dev = NULL;
 	uint32_t queue_id = 0;
 	uint32_t db_id = 0;
+	int ret = 0;
+
+	if (!air_process)
+		return -EINVAL;
 
 	if (args->ring_size_bytes & (args->ring_size_bytes - 1)) {
 		dev_err(amdair_chardev, "Ring size %u is not a power of 2",
@@ -507,13 +522,23 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 		if (queue_id == QUEUE_INVALID_ID)
 			return -ENOSPC;
 
-		db_id = amdair_doorbell_find_free(air_dev);
-		if (db_id == DOORBELL_INVALID_ID)
-			return -ENOSPC;
+		ret = amdair_process_assign_doorbell(air_process,
+						     args->device_id, &db_id);
+		if (ret)
+			goto err_invalid_db;
 
+		args->queue_id = queue_id;
+
+		/**
+		 * The doorbell, which is the offset into the doorbell page,
+		 * assigned to the process is appended to the lower bits of the
+		 * offset. The caller can use this to get the address of the
+		 * individual doorbell but must make sure to clear it before
+		 * calling mmap() as the offset to mmap() must be page aligned.
+		 */
 		args->doorbell_offset
 			= AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_DOORBELL,
-						    args->device_id, 0);
+						    args->device_id, 0) | db_id;
 		args->queue_offset
 			= AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_QUEUE,
 						    args->device_id, 0);
@@ -533,6 +558,9 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 	}
 
 	return 0;
+
+err_invalid_db:
+	return ret;
 }
 
 static int amdair_ioctl_create_mem_region(struct file *filp, void *data,
