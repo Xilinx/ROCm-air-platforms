@@ -32,11 +32,12 @@ struct amdair_queue_manager {
 	resource_size_t queue_size;
 	resource_size_t queue_buf_base;
 	resource_size_t queue_buf_size;
-	int kernel_id;
+	uint32_t kernel_id;
 	int num_hw_queues;
 	DECLARE_BITMAP(hw_queue_map, MAX_HW_QUEUES);
 };
 
 int amdair_queue_find_free(struct amdair_device *air_dev);
+int amdair_queue_release(struct amdair_device *air_dev, uint32_t queue_id);
 
 #endif /* AMDAIR_QUEUE_H_ */

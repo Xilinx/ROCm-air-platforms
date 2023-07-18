@@ -13,7 +13,7 @@
 #define DOORBELLS_PER_PROCESS ((PAGE_SIZE) / sizeof(uint64_t))
 
 /**
- * struct amdair_process_device: Per process and per device information.
+ * struct amdair_process_device - Per process and per device information.
  *
  * @dev: A device this process is using.
  *
@@ -51,6 +51,15 @@ struct amdair_process {
 
 int amdair_process_create(const struct task_struct *process,
 			  struct amdair_process **air_process);
+/**
+ * amdair_process_release_resources - Release resources allocated to the
+ *                                    process, such as its doorbell page. This
+ *                                    is meant to be called before the process
+ *                                    is destroyed.
+ *
+ * @air_process: Process whose resources are being freed.
+ */
+int amdair_process_release_resources(struct amdair_process *air_process);
 
 int amdair_process_create_process_device(struct amdair_process *air_process);
 int amdair_process_get_process_device(struct amdair_process *air_process,
@@ -59,5 +68,7 @@ int amdair_process_get_process_device(struct amdair_process *air_process,
 
 int amdair_process_assign_doorbell(struct amdair_process *air_process,
 				   uint32_t dev_id, uint32_t *db_id);
+int amdair_process_doorbell_release(struct amdair_process *air_process,
+				    uint32_t dev_id, uint32_t db_id);
 
 #endif /* AMDAIR_PROCESS_H_ */

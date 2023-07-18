@@ -36,6 +36,18 @@ err_alloc_process:
 	return ret;
 }
 
+int amdair_process_release_resources(struct amdair_process *air_process)
+{
+	int i = 0;
+
+	for (i = 0; i < air_process->num_proc_devs; ++i) {
+		amdair_doorbell_release(air_process->proc_devs[i].dev,
+					air_process->proc_devs[i].db_page_id);
+	}
+
+	return 0;
+}
+
 int amdair_process_create_process_device(struct amdair_process *air_process)
 {
 	struct amdair_device *air_dev = NULL;
@@ -98,6 +110,8 @@ int amdair_process_assign_doorbell(struct amdair_process *air_process,
 		air_proc_dev->num_dbs = DOORBELLS_PER_PROCESS;
 	}
 
+	dev_info(&air_dev->pdev->dev, "Assigning doorbell page %u",
+		 air_proc_dev->db_page_id);
 	*db_id = find_first_zero_bit(air_proc_dev->doorbell_id_map,
 				     air_proc_dev->num_dbs);
 
@@ -105,6 +119,7 @@ int amdair_process_assign_doorbell(struct amdair_process *air_process,
 		ret = -ENOSPC;
 		goto err_invalid_db_id;
 	}
+	set_bit(*db_id, air_proc_dev->doorbell_id_map);
 
 	return 0;
 
@@ -112,4 +127,16 @@ err_invalid_db_id:
 	amdair_doorbell_release(air_dev, air_proc_dev->db_page_id);
 err_no_dev:
 	return ret;
+}
+
+int amdair_process_doorbell_release(struct amdair_process *air_process,
+				     uint32_t dev_id, uint32_t db_id)
+{
+	struct amdair_process_device *air_proc_dev = NULL;
+	int ret = amdair_process_get_process_device(air_process, dev_id,
+						    &air_proc_dev);
+	if (ret)
+		return ret;
+	clear_bit(db_id, air_proc_dev->doorbell_id_map);
+	return 0;
 }

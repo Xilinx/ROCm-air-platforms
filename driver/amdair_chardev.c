@@ -44,6 +44,7 @@
  * BITS[63:62] - Encode mmap type.
  * BITS[61:54] - Encode Versal device ID.
  * BITS[53:38] - Encode the buffer object (BO) handle.
+ * BITS[37:35] - Encode the queue ID.
  */
 #define AMDAIR_MMAP_TYPE_SHIFT 62ULL
 #define AMDAIR_MMAP_TYPE_MASK 0x3ULL
@@ -56,22 +57,31 @@
 
 #define AMDAIR_MMAP_DEV_ID_SHIFT 54ULL
 #define AMDAIR_MMAP_DEV_ID_WIDTH 8ULL
-#define AMDAIR_MMAP_DEV_ID_MASK ((AMDAIR_MMAP_DEV_ID_WIDTH) - 1)
+#define AMDAIR_MMAP_DEV_ID_MASK ((1ULL << (AMDAIR_MMAP_DEV_ID_WIDTH)) - 1ULL)
 #define AMDAIR_MMAP_GET_DEV_ID(offset_) \
 	((offset_ >> (AMDAIR_MMAP_DEV_ID_SHIFT)) & (AMDAIR_MMAP_DEV_ID_MASK))
 
 #define AMDAIR_MMAP_BO_HANDLE_SHIFT 38ULL
 #define AMDAIR_MMAP_BO_HANDLE_WIDTH 16ULL
-#define AMDAIR_MMAP_BO_HANDLE_MASK ((AMDAIR_MMAP_BO_HANDLE_WIDTH) - 1)
-#define AMDAIR_MMAP_BO_GET_HANDLE(offset_) \
+#define AMDAIR_MMAP_BO_HANDLE_MASK ((1ULL << (AMDAIR_MMAP_BO_HANDLE_WIDTH)) - 1ULL)
+#define AMDAIR_MMAP_GET_BO_HANDLE(offset_) \
 	((offset_ >> (AMDAIR_BO_HANDLE_SHIFT)) & (AMDAIR_MMAP_BO_HANDLE_MASK))
 
-#define AMDAIR_MMAP_CREATE_OFFSET(type_, dev_id_, bo_handle_) \
-	((type_ & AMDAIR_MMAP_TYPE_MASK) << (AMDAIR_MMAP_TYPE_SHIFT)) | \
-	((dev_id_ & (AMDAIR_MMAP_DEV_ID_MASK)) \
-		<< (AMDAIR_MMAP_DEV_ID_SHIFT)) | \
-	((bo_handle_ & (AMDAIR_MMAP_BO_HANDLE_MASK)) << \
-		(AMDAIR_MMAP_BO_HANDLE_SHIFT))
+#define AMDAIR_MMAP_QUEUE_ID_SHIFT 35ULL
+#define AMDAIR_MMAP_QUEUE_ID_WIDTH 3ULL
+#define AMDAIR_MMAP_QUEUE_ID_MASK ((1ULL << (AMDAIR_MMAP_QUEUE_ID_WIDTH)) - 1ULL)
+#define AMDAIR_MMAP_GET_QUEUE_ID(offset_) \
+	((offset_ >> (AMDAIR_MMAP_QUEUE_ID_SHIFT)) \
+		& (AMDAIR_MMAP_QUEUE_ID_MASK))
+
+#define AMDAIR_MMAP_CREATE_OFFSET(type_, dev_id_, bo_handle_, queue_id_) \
+	(((type_ & (AMDAIR_MMAP_TYPE_MASK)) << (AMDAIR_MMAP_TYPE_SHIFT)) \
+	| ((dev_id_ & (AMDAIR_MMAP_DEV_ID_MASK)) \
+		<< (AMDAIR_MMAP_DEV_ID_SHIFT)) \
+	| ((bo_handle_ & (AMDAIR_MMAP_BO_HANDLE_MASK)) \
+		<< (AMDAIR_MMAP_BO_HANDLE_SHIFT)) \
+	| ((queue_id_ & (AMDAIR_MMAP_QUEUE_ID_MASK)) \
+		<< (AMDAIR_MMAP_QUEUE_ID_SHIFT)))
 
 enum aie_address_validation {
 	AIE_ADDR_OK,
@@ -123,6 +133,8 @@ static int amdair_ioctl_destroy_object(struct file *filp, void *data,
 				       struct amdair_process *air_process);
 static int amdair_ioctl_create_queue(struct file *filp, void *data,
 				     struct amdair_process *air_process);
+static int amdair_ioctl_destroy_queue(struct file *filp, void *data,
+				      struct amdair_process *air_process);
 static int amdair_ioctl_create_mem_region(struct file *filp, void *data,
 					  struct amdair_process *air_process);
 
@@ -163,6 +175,7 @@ static const struct amdair_ioctl_desc amdair_ioctl_table[] = {
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_DESTROY_OBJECT, amdair_ioctl_destroy_object,
 			 0),
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_CREATE_QUEUE, amdair_ioctl_create_queue, 0),
+	AMDAIR_IOCTL_DEF(AMDAIR_IOC_DESTROY_QUEUE, amdair_ioctl_destroy_queue, 0),
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_CREATE_MEM_REGION,
 			 amdair_ioctl_create_mem_region, 0),
 };
@@ -291,6 +304,7 @@ static int amdair_open(struct inode *node, struct file *filp)
 	int ret = 0;
 
 	dev_info(amdair_chardev, "%s", __func__);
+
 	ret = amdair_process_create(current, &air_process);
 
 	if (ret)
@@ -312,8 +326,10 @@ static int amdair_release(struct inode *node, struct file *filp)
 
 	dev_info(amdair_chardev, "%s", __func__);
 
-	if (air_process)
+	if (air_process) {
+		amdair_process_release_resources(air_process);
 		kfree(air_process);
+	}
 
 	return 0;
 }
@@ -335,6 +351,7 @@ static int amdair_mmap(struct file *filp, struct vm_area_struct *vma)
 	unsigned long start, end;
 	unsigned long mmap_offset = vma->vm_pgoff << PAGE_SHIFT;
 	int dev_id = AMDAIR_MMAP_GET_DEV_ID(mmap_offset);
+	uint32_t queue_id = AMDAIR_MMAP_GET_QUEUE_ID(mmap_offset);
 
 	air_dev = amdair_device_get_by_id(dev_id);
 
@@ -355,12 +372,13 @@ static int amdair_mmap(struct file *filp, struct vm_area_struct *vma)
 		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_QUEUE:
-		start = air_dev->queue_mgr.queue_base;
+		start = air_dev->queue_mgr.queue_base + queue_id * PAGE_SIZE;
 		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_QUEUE_BUF:
-		start = air_dev->queue_mgr.queue_buf_base;
-		end = air_dev->queue_mgr.queue_buf_base + size;
+		start = air_dev->queue_mgr.queue_buf_base
+			+ queue_id * PAGE_SIZE;
+		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_BO:
 		obj = amdair_find_object_by_handle(mmap_offset);
@@ -528,23 +546,19 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 			goto err_invalid_db;
 
 		args->queue_id = queue_id;
+		args->doorbell_id = db_id;
 
-		/**
-		 * The doorbell, which is the offset into the doorbell page,
-		 * assigned to the process is appended to the lower bits of the
-		 * offset. The caller can use this to get the address of the
-		 * individual doorbell but must make sure to clear it before
-		 * calling mmap() as the offset to mmap() must be page aligned.
-		 */
 		args->doorbell_offset
 			= AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_DOORBELL,
-						    args->device_id, 0) | db_id;
+						    args->device_id, 0, 0);
 		args->queue_offset
 			= AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_QUEUE,
-						    args->device_id, 0);
+						    args->device_id, 0,
+						    queue_id);
 		args->queue_buf_offset
 			= AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_QUEUE_BUF,
-						    args->device_id, 0);
+						    args->device_id, 0,
+						    queue_id);
 
 		dev_info(amdair_chardev, "doorbell offset %llx, "
 			 "queue offset %llx, queue_id %x, db_id %x, dev id %d",
@@ -560,6 +574,33 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 	return 0;
 
 err_invalid_db:
+	return ret;
+}
+
+/**
+ * amdair_ioctl_destroy_queue - Destroy a previously allocated HW queue.
+ *
+ * @air_process: Process destroying the queue.
+ *
+ * Destroy a queue of a specified device. It will release a HW queue so that it
+ * can be reused by a future process.
+ */
+static int amdair_ioctl_destroy_queue(struct file *filp, void *data,
+				      struct amdair_process *air_process)
+{
+	struct amdair_destroy_queue_args *args = data;
+	struct amdair_device *air_dev
+		= amdair_device_get_by_id(args->device_id);
+	int ret = 0;
+
+	if (!air_dev || air_dev->device_id != args->device_id)
+		return -ENODEV;
+
+	dev_info(&air_dev->pdev->dev, "Destroying queue ID %u", args->queue_id);
+	ret = amdair_queue_release(air_dev, args->queue_id);
+	ret = amdair_process_doorbell_release(air_process, args->device_id,
+					      args->doorbell_id);
+
 	return ret;
 }
 
@@ -603,7 +644,8 @@ static int amdair_ioctl_create_mem_region(struct file *filp, void *data,
 		be able to map it
 	*/
 	obj->handle = AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_BO,
-						args->device_id, args->region);
+						args->device_id, args->region,
+						0);
 
 	/* Add it to the list of managed objects */
 	amdair_add_object(obj);
