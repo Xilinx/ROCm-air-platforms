@@ -134,7 +134,7 @@ static void amdair_pci_remove(struct pci_dev *pdev)
 	amdair_chardev_exit();
 
 	if (air_dev) {
-		kobject_put(&air_dev->kobj_aie);
+		amdair_device_free_resources(air_dev);
 		kfree(air_dev);
 	}
 

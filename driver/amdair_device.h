@@ -8,6 +8,7 @@
 
 #include "amdair_device_type.h"
 #include "amdair_doorbell.h"
+#include "amdair_mem_manager.h"
 #include "amdair_queue.h"
 
 /* The indices in config space (64-bit BARs) */
@@ -38,6 +39,9 @@ extern struct amdair_aie_info aie_info;
 struct amdair_device_init_funcs {
 	void (*init_queues)(struct amdair_device *air_dev);
 	void (*init_doorbells)(struct amdair_device *air_dev);
+	void (*set_device_heap)(struct amdair_device *air_dev,
+				int queue_reg_off,
+				uint64_t vaddr);
 };
 
 /**
@@ -45,6 +49,8 @@ struct amdair_device_init_funcs {
  * system.
  *
  * @dev_init_funcs: Device-specific functions for initializing device state.
+ *
+ * @mman: Manages the device's on-chip memory.
  *
  * @queue_mgr: Manages the device's queues.
  *
@@ -54,9 +60,9 @@ struct amdair_device_init_funcs {
  *
  * @device_id: Unique device ID number.
  *
- * @aie_base: Base address of the AIE BAR.
+ * @dram_base: Base address of the DRAM BAR.
  *
- * @aie_size: Size of the AIE BAR.
+ * @dram_size: Size of the DRAM BAR.
  *
  * @bram_base: Base address of the BRAM BAR.
  *
@@ -72,21 +78,21 @@ struct amdair_device {
 	struct kobject kobj_aie;
 
 	struct amdair_device_init_funcs *dev_init_funcs;
+	struct amdair_mem_manager mman;
 	struct amdair_queue_manager queue_mgr;
 	struct amdair_doorbell doorbell;
 	enum amdair_device_type dev_type;
 
-	int device_id;
+	uint32_t device_id;
 
-	resource_size_t aie_base;
-	resource_size_t aie_size;
+	resource_size_t dram_base;
+	resource_size_t dram_size;
 	resource_size_t bram_base;
 	resource_size_t bram_size;
 
 	void __iomem *aie_bar;
 	uint64_t aie_bar_len;
 	void __iomem *bram_bar;
-	uint64_t bram_bar_len;
 
 	/* AIE memory can be accessed indirectly through sysfs.
 		It is a two-step protocol:
@@ -100,7 +106,8 @@ struct amdair_device {
 
 int amdair_device_init(struct amdair_device *air_dev,
 		       enum amdair_device_type dev_type);
-int amdair_register_aie_instance(struct amdair_device *dev);
-struct amdair_device *amdair_device_get_by_id(int device_id);
+int amdair_register_aie_instance(struct amdair_device *air_dev);
+void amdair_device_free_resources(struct amdair_device *air_dev);
+struct amdair_device *amdair_device_get_by_id(uint32_t device_id);
 
 #endif /* AMDAIR_DEVICE_H_ */

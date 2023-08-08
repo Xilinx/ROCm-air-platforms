@@ -6,6 +6,7 @@
 
 #include "amdair_device.h"
 
+#include "amdair_object.h"
 #include "vck5000.h"
 
 struct amdair_aie_info aie_info = {
@@ -30,20 +31,28 @@ int amdair_device_init(struct amdair_device *air_dev,
 		goto err_dev;
 	}
 
-	air_dev->aie_base = pci_resource_start(pdev, AIE_BAR_INDEX);
+	air_dev->dram_base = pci_resource_start(pdev, DRAM_BAR_INDEX);
+	air_dev->dram_size = pci_resource_len(pdev, DRAM_BAR_INDEX);
+	dev_info(&pdev->dev, "DRAM BAR 0 0x%lx (0x%llx)",
+		 (unsigned long)air_dev->dram_base, air_dev->dram_size);
+
 	air_dev->aie_bar_len = pci_resource_len(pdev, AIE_BAR_INDEX);
 	air_dev->aie_bar = pcim_iomap_table(pdev)[AIE_BAR_INDEX];
 	dev_info(&pdev->dev, "AIE BAR 2 0x%lx (0x%llx)",
 		 (unsigned long)air_dev->aie_bar, air_dev->aie_bar_len);
 
 	air_dev->bram_base = pci_resource_start(pdev, BRAM_BAR_INDEX);
-	air_dev->bram_bar_len = pci_resource_len(pdev, BRAM_BAR_INDEX);
+	air_dev->bram_size = pci_resource_len(pdev, BRAM_BAR_INDEX);
 	air_dev->bram_bar = pcim_iomap_table(pdev)[BRAM_BAR_INDEX];
 	dev_info(&pdev->dev, "BRAM BAR 4 0x%lx (0x%llx)",
-		 (unsigned long)air_dev->bram_bar, air_dev->bram_bar_len);
+		 (unsigned long)air_dev->bram_bar, air_dev->bram_size);
 
 	air_dev->dev_init_funcs->init_queues(air_dev);
 	air_dev->dev_init_funcs->init_doorbells(air_dev);
+
+	ret = amdair_mman_init(air_dev);
+	if (ret)
+		goto err_mem_mgr;
 
 	ret = amdair_register_aie_instance(air_dev);
 	if (ret)
@@ -51,6 +60,7 @@ int amdair_device_init(struct amdair_device *air_dev,
 
 	return 0;
 
+err_mem_mgr:
 err_dev:
 	return ret;
 }
@@ -66,7 +76,13 @@ int amdair_register_aie_instance(struct amdair_device *air_dev)
 	return 0;
 }
 
-struct amdair_device *amdair_device_get_by_id(int dev_id)
+void amdair_device_free_resources(struct amdair_device *air_dev)
+{
+	kobject_put(&air_dev->kobj_aie);
+	amdair_mman_free_resources(&air_dev->mman);
+}
+
+struct amdair_device *amdair_device_get_by_id(uint32_t dev_id)
 {
 	if (dev_id >= aie_info.num_aie_devs || dev_id >= MAX_AIE_INSTANCE)
 		return NULL;

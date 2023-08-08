@@ -4,7 +4,12 @@
 #ifndef AMDAIR_PROCESS_H_
 #define AMDAIR_PROCESS_H_
 
+#include <linux/interval_tree.h>
+#include <linux/idr.h>
+
 #include "amdair_device.h"
+
+struct amdair_buf_object;
 
 /**
  * One page of doorbells per processes. Each doorbell is 64b as only HSA large
@@ -27,14 +32,31 @@
  *
  * @doorbell_id_map: Free list of doorbells. 0 means free 1 means in use or
  *                   unavailable.
+ *
+ * @dram_heap: On-chip DRAM heap allocations for this process. Maintained as a
+ *             red-black tree.
+ *
+ * @alloc_idr: On-chip buffer object unique handle allocations.
  */
 struct amdair_process_device {
 	struct amdair_device *dev;
 	struct amdair_process *process;
+
 	uint32_t db_page_id;
 	int num_dbs;
 	DECLARE_BITMAP(doorbell_id_map, DOORBELLS_PER_PROCESS);
+
+	struct rb_root_cached dram_heap;
+	struct idr alloc_idr;
 };
+
+int amdair_process_device_create_bo_handle(struct amdair_process_device *air_pd,
+					   uint32_t type_flags, uint64_t base,
+					   uint64_t size, int *handle);
+int amdair_process_device_destroy_bo_handle(struct amdair_process_device *air_pd,
+					    int handle);
+struct amdair_buf_object* amdair_process_device_find_bo(
+	struct amdair_process_device *air_pd, int handle);
 
 /**
  * struct amdair_process - Per process information.
@@ -64,11 +86,10 @@ int amdair_process_release_resources(struct amdair_process *air_process);
 int amdair_process_create_process_device(struct amdair_process *air_process);
 int amdair_process_get_process_device(struct amdair_process *air_process,
 				      uint32_t dev_id,
-				      struct amdair_process_device **air_proc_dev);
+				      struct amdair_process_device **air_pd);
 
 int amdair_process_assign_doorbell(struct amdair_process *air_process,
 				   uint32_t dev_id, uint32_t *db_id);
 int amdair_process_doorbell_release(struct amdair_process *air_process,
 				    uint32_t dev_id, uint32_t db_id);
-
 #endif /* AMDAIR_PROCESS_H_ */

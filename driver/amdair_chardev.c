@@ -64,8 +64,9 @@
 #define AMDAIR_MMAP_BO_HANDLE_SHIFT 38ULL
 #define AMDAIR_MMAP_BO_HANDLE_WIDTH 16ULL
 #define AMDAIR_MMAP_BO_HANDLE_MASK ((1ULL << (AMDAIR_MMAP_BO_HANDLE_WIDTH)) - 1ULL)
-#define AMDAIR_MMAP_GET_BO_HANDLE(offset_) \
-	((offset_ >> (AMDAIR_BO_HANDLE_SHIFT)) & (AMDAIR_MMAP_BO_HANDLE_MASK))
+#define AMDAIR_MMAP_BO_GET_HANDLE(offset_) \
+	((offset_ >> (AMDAIR_MMAP_BO_HANDLE_SHIFT)) \
+		& (AMDAIR_MMAP_BO_HANDLE_MASK))
 
 #define AMDAIR_MMAP_QUEUE_ID_SHIFT 35ULL
 #define AMDAIR_MMAP_QUEUE_ID_WIDTH 3ULL
@@ -129,14 +130,14 @@ static int amdair_mmap(struct file *, struct vm_area_struct *);
 
 static int amdair_ioctl_get_version(struct file *filp, void *data,
 				    struct amdair_process *air_process);
-static int amdair_ioctl_destroy_object(struct file *filp, void *data,
-				       struct amdair_process *air_process);
 static int amdair_ioctl_create_queue(struct file *filp, void *data,
 				     struct amdair_process *air_process);
 static int amdair_ioctl_destroy_queue(struct file *filp, void *data,
 				      struct amdair_process *air_process);
-static int amdair_ioctl_create_mem_region(struct file *filp, void *data,
-					  struct amdair_process *air_process);
+static int amdair_ioctl_alloc_device_memory(struct file *filp, void *data,
+					    struct amdair_process *air_process);
+static int amdair_ioctl_free_device_memory(struct file *filp, void *data,
+					   struct amdair_process *air_process);
 
 /* define sysfs attributes */
 struct amdair_attribute aie_attr_address = __ATTR_RW(address);
@@ -172,12 +173,13 @@ static struct device *amdair_chardev;
 
 static const struct amdair_ioctl_desc amdair_ioctl_table[] = {
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_GET_VERSION, amdair_ioctl_get_version, 0),
-	AMDAIR_IOCTL_DEF(AMDAIR_IOC_DESTROY_OBJECT, amdair_ioctl_destroy_object,
-			 0),
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_CREATE_QUEUE, amdair_ioctl_create_queue, 0),
-	AMDAIR_IOCTL_DEF(AMDAIR_IOC_DESTROY_QUEUE, amdair_ioctl_destroy_queue, 0),
-	AMDAIR_IOCTL_DEF(AMDAIR_IOC_CREATE_MEM_REGION,
-			 amdair_ioctl_create_mem_region, 0),
+	AMDAIR_IOCTL_DEF(AMDAIR_IOC_DESTROY_QUEUE,
+			 amdair_ioctl_destroy_queue, 0),
+	AMDAIR_IOCTL_DEF(AMDAIR_IOC_ALLOC_DEVICE_MEMORY,
+			 amdair_ioctl_alloc_device_memory, 0),
+	AMDAIR_IOCTL_DEF(AMDAIR_IOC_FREE_DEVICE_MEMORY,
+			 amdair_ioctl_free_device_memory, 0),
 };
 
 static char *amdair_devnode(struct device *dev, umode_t *mode)
@@ -342,102 +344,73 @@ static int amdair_release(struct inode *node, struct file *filp)
 static int amdair_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct amdair_process *air_process = filp->private_data;
-	struct amdair_process_device *air_proc_dev = NULL;
-	struct pci_dev *pdev = NULL;
-	struct amdair_device *air_dev = NULL;
-	struct amdair_object *obj = NULL;
-	int ret = 0;
+	struct amdair_process_device *air_pd = NULL;
+	struct amdair_buf_object *air_bo = NULL;
 	size_t size = vma->vm_end - vma->vm_start;
-	unsigned long start, end;
-	unsigned long mmap_offset = vma->vm_pgoff << PAGE_SHIFT;
-	int dev_id = AMDAIR_MMAP_GET_DEV_ID(mmap_offset);
+	uint64_t start = 0;
+	uint64_t end = 0;
+	uint64_t mmap_offset = vma->vm_pgoff << PAGE_SHIFT;
+	uint32_t dev_id = AMDAIR_MMAP_GET_DEV_ID(mmap_offset);
 	uint32_t queue_id = AMDAIR_MMAP_GET_QUEUE_ID(mmap_offset);
-
-	air_dev = amdair_device_get_by_id(dev_id);
-
-	if (!air_dev)
-		return -ENODEV;
-
-	pdev = air_dev->pdev;
+	int handle = AMDAIR_MMAP_BO_GET_HANDLE(mmap_offset);
+	int ret = 0;
 
 	ret = amdair_process_get_process_device(air_process, dev_id,
-						&air_proc_dev);
+						&air_pd);
 	if (ret)
 		return ret;
 
+        dev_info(&air_pd->dev->pdev->dev, "%s: offset %llx", __func__,
+	         mmap_offset);
+
 	switch (AMDAIR_MMAP_GET_TYPE(mmap_offset)) {
 	case AMDAIR_MMAP_TYPE_DOORBELL:
-		start = air_dev->doorbell.base
-			+ air_proc_dev->db_page_id * PAGE_SIZE;
+		start = air_pd->dev->doorbell.base
+			+ air_pd->db_page_id * PAGE_SIZE;
 		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_QUEUE:
-		start = air_dev->queue_mgr.queue_base + queue_id * PAGE_SIZE;
+		start = air_pd->dev->queue_mgr.queue_base
+			+ queue_id * PAGE_SIZE;
 		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_QUEUE_BUF:
-		start = air_dev->queue_mgr.queue_buf_base
+		start = air_pd->dev->queue_mgr.queue_buf_base
 			+ queue_id * PAGE_SIZE;
 		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_BO:
-		obj = amdair_find_object_by_handle(mmap_offset);
-		if (!obj) {
-			printk("Can't find object with handle 0x%lx\n",
-			       mmap_offset);
-			return -1;
+		air_bo = amdair_process_device_find_bo(air_pd, handle);
+
+		if (!air_bo) {
+			dev_err(&air_pd->dev->pdev->dev,
+			        "%s: No object with handle %d", __func__,
+				handle);
+			return -EINVAL;
 		}
 
-		if (obj->owner != current->pid) {
-			printk("PID %u is trying to steal object 0x%llx!\n",
-			       current->pid, obj->handle);
-			return -1;
-		}
+		dev_info(&air_pd->dev->pdev->dev,
+			 "%s: Mapping BO with handle %d", __func__, handle);
 
-		switch (obj->range) {
-		case AMDAIR_MEM_RANGE_AIE:
-			if (!enable_aie) {
-				dev_warn(amdair_chardev,
-					 "mapping AIE BAR is not enabled");
-				return -EOPNOTSUPP;
-			}
-			start = pci_resource_start(pdev, AIE_BAR_INDEX)
-				+ obj->base;
-			end = pci_resource_end(pdev, AIE_BAR_INDEX);
-			dev_warn(amdair_chardev,
-				 "mapping 0x%lx AIE at 0x%lx to 0x%lx", size,
-				 start, vma->vm_start);
-			break;
-		case AMDAIR_MEM_RANGE_DRAM:
-			start = pci_resource_start(pdev, DRAM_BAR_INDEX)
-				+ obj->base;
-			end = pci_resource_end(pdev, DRAM_BAR_INDEX);
-			dev_warn(amdair_chardev,
-				 "mapping 0x%lx DRAM at 0x%lx to 0x%lx", size,
-				 start, vma->vm_start);
-			break;
-		case AMDAIR_MEM_RANGE_BRAM:
-			start = pci_resource_start(pdev, BRAM_BAR_INDEX) + obj->base;
-			end = pci_resource_end(pdev, BRAM_BAR_INDEX);
-			dev_warn(amdair_chardev,
-				 "mapping 0x%lx BRAM at 0x%lx to 0x%lx", size,
-				 start, vma->vm_start);
+		switch (air_bo->heap_type) {
+		case BO_HEAP_TYPE_BRAM:
+			dev_warn(&air_pd->dev->pdev->dev,
+				 "%s: BRAM heap not currently supported",
+				 __func__);
+			return -EINVAL;
+		case BO_HEAP_TYPE_DRAM:
+			start = air_bo->it_node.start;
+			end = start + size;
 			break;
 		default:
-			dev_warn(amdair_chardev, "Unrecognized mmap range %u",
-				 obj->range);
-			return -EOPNOTSUPP;
-		}
-
-		if ((start + obj->size) >= end) {
-			dev_err(amdair_chardev,
-				"size 0x%lx starting at 0x%lx exceeds BAR",
-				size, start);
+			dev_err(&air_pd->dev->pdev->dev,
+				"%s: Invalid BO heap type", __func__);
 			return -EINVAL;
 		}
 		break;
 	default:
-		dev_err(&pdev->dev, "Unrecognized MMAP offset %lx",
+		dev_err(&air_pd->dev->pdev->dev,
+			"%s: Unrecognized MMAP offset %llx", __func__,
 			mmap_offset);
 		return -EFAULT;
 	}
@@ -463,33 +436,6 @@ static int amdair_ioctl_get_version(struct file *filp, void *data,
 		 AMDAIR_IOCTL_MAJOR_VERSION, AMDAIR_IOCTL_MINOR_VERSION);
 	args->major_version = AMDAIR_IOCTL_MAJOR_VERSION;
 	args->minor_version = AMDAIR_IOCTL_MINOR_VERSION;
-
-	return 0;
-}
-
-/*
-	Destroy a previously created object
-
-	TODO: Probably a good idea to quiesce and drain queues before destroying
-*/
-static int amdair_ioctl_destroy_object(struct file *filp, void *data,
-				       struct amdair_process *air_process)
-{
-	struct amdair_object *queue;
-	struct amdair_destroy_object_args *args =
-		(struct amdair_destroy_object_args *)data;
-
-	dev_warn(amdair_chardev, "%s %llu from pid %u", __func__, args->handle,
-		 current->pid);
-
-	queue = amdair_find_object_by_handle(args->handle);
-	if (!queue) {
-		dev_warn(amdair_chardev,
-			 "Could not find queue with handle %llu", args->handle);
-		return -EINVAL;
-	}
-
-	amdair_remove_object(queue->handle);
 
 	return 0;
 }
@@ -547,6 +493,8 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 
 		args->queue_id = queue_id;
 		args->doorbell_id = db_id;
+		air_dev->dev_init_funcs->set_device_heap(air_dev, queue_id,
+							 args->dram_heap_vaddr);
 
 		args->doorbell_offset
 			= AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_DOORBELL,
@@ -561,9 +509,10 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 						    queue_id);
 
 		dev_info(amdair_chardev, "doorbell offset %llx, "
-			 "queue offset %llx, queue_id %x, db_id %x, dev id %d",
+			 "queue offset %llx, queue_id %x, db_id %x, dev id %d "
+			 "DRAM heap CPU VA %llx",
 			 args->doorbell_offset, args->queue_offset, queue_id,
-			 db_id, args->device_id);
+			 db_id, args->device_id, args->dram_heap_vaddr);
 		break;
 	default:
 		dev_err(amdair_chardev, "Queue type %u not supported",
@@ -604,53 +553,57 @@ static int amdair_ioctl_destroy_queue(struct file *filp, void *data,
 	return ret;
 }
 
-static int amdair_ioctl_create_mem_region(struct file *filp, void *data,
-					  struct amdair_process *air_process)
+static int amdair_ioctl_alloc_device_memory(struct file *filp, void *data,
+					    struct amdair_process *air_process)
 {
-	struct amdair_device *dev;
-	struct amdair_object *obj;
-	struct amdair_create_mr_args *args =
-		(struct amdair_create_mr_args *)data;
+	struct amdair_alloc_device_memory_args *args = data;
+	struct amdair_process_device *air_pd = NULL;
+	resource_size_t base = 0;
+	int handle = 0;
+	int ret = 0;
 
-	dev_warn(amdair_chardev, "%s from pid %u", __func__, current->pid);
-
-	dev = amdair_device_get_by_id(args->device_id);
-	if (!dev) {
-		printk("Can't find device id %u\n", args->device_id);
+	if (!(args->flags & AMDAIR_IOC_ALLOC_MEM_HEAP_TYPE_DRAM))
 		return -EINVAL;
-	}
 
-	if (args->region < AMDAIR_MEM_RANGE_BRAM ||
-	    args->region > AMDAIR_MEM_RANGE_AIE) {
-		printk("Invalid memory region %u\n", args->region);
+	ret = amdair_process_get_process_device(air_process, args->device_id,
+						&air_pd);
+
+	if (ret)
+		return ret;
+	
+	base = air_pd->dev->dram_base;
+	ret = amdair_process_device_create_bo_handle(air_pd, args->flags, base,
+						     args->size, &handle);
+	if (ret)
+		return ret;
+	
+	args->handle = handle;
+	args->mmap_offset = AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_BO,
+						      args->device_id, handle,
+						      0);
+	dev_info(&air_pd->dev->pdev->dev, "%s: Created buffer object, "
+		 "handle %d, mmap offset %llx, size %llx", __func__, handle,
+		 args->mmap_offset, args->size);
+
+	return 0;
+}
+
+static int amdair_ioctl_free_device_memory(struct file *filp, void *data,
+					   struct amdair_process *air_process)
+{
+	struct amdair_free_device_memory_args *args = data;
+	struct amdair_process_device *air_pd = NULL;
+	int ret = 0;
+
+	if (args->handle < 0)
 		return -EINVAL;
-	}
 
-	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
-	if (!obj) {
-		printk("Error allocating mem region object");
-		return -ENOMEM;
-	}
+	ret = amdair_process_get_process_device(air_process, args->device_id,
+						&air_pd);
+	if (ret)
+		return ret;
 
-	obj->dev = dev;
-	obj->owner = current->pid;
-	obj->range = args->region;
-	obj->base = args->start;
-	obj->size = args->size;
-
-	/*
-		create a unique handle per device & region. Note: two processes can
-		register the same region for the same device but only the first will
-		be able to map it
-	*/
-	obj->handle = AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_BO,
-						args->device_id, args->region,
-						0);
-
-	/* Add it to the list of managed objects */
-	amdair_add_object(obj);
-
-	args->handle = obj->handle;
+	amdair_process_device_destroy_bo_handle(air_pd, args->handle);
 
 	return 0;
 }

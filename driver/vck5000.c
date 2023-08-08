@@ -1,3 +1,4 @@
+#include <linux/io-64-nonatomic-hi-lo.h>
 #include <linux/pci.h>
 
 #include "amdair_device.h"
@@ -5,10 +6,16 @@
 #include "vck5000_regs.h"
 
 
-static int32_t vck5000_bram_reg_read32(struct amdair_device *air_dev,
+static uint32_t vck5000_bram_reg_read32(struct amdair_device *air_dev,
 				       int reg_off)
 {
 	return ioread32(air_dev->bram_bar + reg_off);
+}
+
+static void vck5000_bram_reg_write64(struct amdair_device *air_dev, int reg_off,
+				     uint64_t val)
+{
+	iowrite64(val, air_dev->bram_bar + reg_off);
 }
 
 static void vck5000_init_queues(struct amdair_device *air_dev)
@@ -71,9 +78,18 @@ static void vck5000_init_doorbells(struct amdair_device *air_dev)
 		 air_dev->doorbell.num_db_pages);
 }
 
+static void vck5000_set_device_heap(struct amdair_device *air_dev,
+				    int queue_reg_off, uint64_t vaddr)
+{
+	vck5000_bram_reg_write64(air_dev,
+				 DRAM_HEAP_VADDR_REG + queue_reg_off * sizeof(uint64_t),
+				 vaddr);
+}
+
 static struct amdair_device_init_funcs vck5000_dev_init_funcs = {
 	.init_queues = &vck5000_init_queues,
-	.init_doorbells = &vck5000_init_doorbells
+	.init_doorbells = &vck5000_init_doorbells,
+	.set_device_heap = &vck5000_set_device_heap
 };
 
 void vck5000_dev_init(struct amdair_device *air_dev)
