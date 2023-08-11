@@ -1,5 +1,9 @@
 #include "arm_bp_intf.h"
 
+void packet_set_active(hsa_agent_dispatch_packet_t *pkt, bool b) {
+  pkt->reserved2 = (pkt->reserved2 & ~0x1) | b;
+}
+
 uint64_t get_bp_base_addr(uint8_t bp_id) {
   return (uint64_t)(BP_BASE_PADDR + bp_id * BP_SIZE);
 }
@@ -170,7 +174,7 @@ void start_bps() {
   }
 }
 
-void handle_packet_prog_firmware(dispatch_packet_t *pkt) {
+void handle_packet_prog_firmware(hsa_agent_dispatch_packet_t *pkt) {
   packet_set_active(pkt, true);
 
   uint64_t  phys_addr       = pkt->arg[0];

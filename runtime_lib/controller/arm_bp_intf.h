@@ -2,13 +2,13 @@
 #define __ARM_BP_INTF_H_
 
 #include "unistd.h"
+
 #include <cstdint>
 #include <cstring>
 #include <string>
 #include <algorithm>
 
-#include "air_queue.h"
-#include "hsa_defs.h"
+#include "hsa.h"
 #include "bp.h"
 #include "xil_printf.h"
 
@@ -43,7 +43,7 @@ template <class T>
 T reverse_bytes(T bytes);
 
 uint64_t get_bp_base_addr(uint8_t bp_id);
-void handle_packet_prog_firmware(dispatch_packet_t *pkt);
+void handle_packet_prog_firmware(hsa_agent_dispatch_packet_t *pkt);
 void start_bps();
 void load_bp_dram(uint64_t phys_addr, uint32_t file_num_lines);
 void bp_freeze();
