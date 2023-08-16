@@ -47,8 +47,8 @@ int amdair_device_init(struct amdair_device *air_dev,
 	dev_info(&pdev->dev, "BRAM BAR 4 0x%lx (0x%llx)",
 		 (unsigned long)air_dev->bram_bar, air_dev->bram_size);
 
-	air_dev->dev_init_funcs->init_queues(air_dev);
-	air_dev->dev_init_funcs->init_doorbells(air_dev);
+	air_dev->dev_asic_funcs->init_queues(air_dev);
+	air_dev->dev_asic_funcs->init_doorbells(air_dev);
 
 	ret = amdair_mman_init(air_dev);
 	if (ret)

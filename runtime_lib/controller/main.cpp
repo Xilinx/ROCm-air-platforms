@@ -1233,6 +1233,31 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
 }
 #endif
 
+#define AIE_BASE 0x020000000000
+#define AIE_CSR_SIZE 0x000100000000
+
+void handle_packet_read_write_aie_reg32(hsa_agent_dispatch_packet_t *pkt, bool is_write) {
+
+  packet_set_active(pkt, true);
+  uint64_t address = pkt->arg[0];
+  uint32_t value = pkt->arg[1] & 0xFFFFFFFF;
+
+  volatile uint32_t *aie_csr = (volatile uint32_t *)AIE_BASE;
+
+  if (address > AIE_CSR_SIZE) {
+    printf("[ERROR] read32/write32 packets provided address of size 0x%lx. "
+           "Window is only 4GB\n",
+           address);
+  }
+
+  if (is_write) {
+    aie_csr[address >> 2] = value;
+  } else {
+    pkt->arg[2] = (0xffffffff & aie_csr[address >> 2]);
+  }
+  packet_set_active(pkt, false);
+  --pkt->completion_signal.handle;
+}
 
 // uint64_t cdma_base = 0x0202C0000000UL;
 // uint64_t cdma_base1 = 0x020340000000UL;
@@ -1578,10 +1603,10 @@ int stage_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint32_t slot,
 
 } // namespace
 
-void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id) {
+void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   hsa_agent_dispatch_packet_t *pkt_buf(
-      reinterpret_cast<hsa_agent_dispatch_packet_t*>(hsa_csr->queue_bufs[1]));
+      reinterpret_cast<hsa_agent_dispatch_packet_t*>(hsa_csr->queue_bufs[queue_id]));
   hsa_agent_dispatch_packet_t *pkt(
       &pkt_buf[*rd_id % amd_queue->hsa_queue.size]);
 
@@ -1693,8 +1718,14 @@ void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id) {
       handle_packet_rdma_post_wqe(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
+    case AIR_PKT_TYPE_READ_AIE_REG32:
+      handle_packet_read_write_aie_reg32(pkt, false);
+      packets_processed++;
       break;
-
+    case AIR_PKT_TYPE_WRITE_AIE_REG32:
+      handle_packet_read_write_aie_reg32(pkt, true);
+      packets_processed++;
+      break;
     case AIR_PKT_TYPE_POST_RDMA_RECV:
       handle_packet_rdma_post_recv(pkt);
       complete_agent_dispatch_packet(pkt);
@@ -1970,8 +2001,22 @@ int main() {
   start_bps();
 #endif
 
-  int hqd_id(1);
   bool done(false);
+
+  int admin_queue_id(0);
+  amd_queue_t *admin_queue(hsa_csr->amd_aql_queues[admin_queue_id]);
+  admin_queue->hsa_queue.size = 64;
+  volatile uint64_t *admin_doorbell(reinterpret_cast<uint64_t*>(
+      hsa_csr->doorbells[admin_queue_id]));
+  volatile uint64_t *admin_rd_id(&admin_queue->read_dispatch_id);
+  volatile uint64_t *admin_wr_id(&admin_queue->write_dispatch_id);
+  hsa_agent_dispatch_packet_t *admin_queue_buf(
+      reinterpret_cast<hsa_agent_dispatch_packet_t*>(
+          hsa_csr->queue_bufs[admin_queue_id]));
+  hsa_agent_dispatch_packet_t *admin_pkt(nullptr);
+  uint64_t admin_last_doorbell(std::numeric_limits<uint64_t>::max());
+
+  int hqd_id(1);
   amd_queue_t *amd_queue(hsa_csr->amd_aql_queues[hqd_id]);
   volatile uint64_t *doorbell(reinterpret_cast<uint64_t*>(
       hsa_csr->doorbells[hqd_id]));
@@ -1980,15 +2025,34 @@ int main() {
   hsa_agent_dispatch_packet_t *queue_buf(
       reinterpret_cast<hsa_agent_dispatch_packet_t*>(
           hsa_csr->queue_bufs[hqd_id]));
-  hsa_agent_dispatch_packet_t *aql_pkt = nullptr;
-
+  hsa_agent_dispatch_packet_t *aql_pkt(nullptr);
   uint64_t last_doorbell(std::numeric_limits<uint64_t>::max());
+
   *doorbell = std::numeric_limits<uint64_t>::max();
   *rd_id = 0;
   *wr_id = 0;
 
+  *admin_doorbell = std::numeric_limits<uint64_t>::max();
+  *admin_rd_id = 0;
+  *admin_wr_id = 0;
+
   air_printf("Starting packet processing loop\n\r");
   while (!done) {
+    if (*admin_doorbell != admin_last_doorbell) {
+      ++admin_last_doorbell;
+      admin_pkt = &admin_queue_buf[*admin_rd_id % 64];
+
+      switch (admin_pkt->header & 0xffU) {
+        case HSA_PACKET_TYPE_AGENT_DISPATCH:
+          handle_agent_dispatch_packet(admin_queue, mb_id, admin_queue_id);
+          break;
+        default:
+          air_printf("Unsupported admin queue packet type\n\r");
+          ++(*admin_rd_id);
+          break;
+      }
+    }
+
     if (*doorbell != last_doorbell) {
       ++last_doorbell;
       aql_pkt = &queue_buf[*rd_id % amd_queue->hsa_queue.size];
@@ -2010,7 +2074,7 @@ int main() {
       switch (type) {
         case HSA_PACKET_TYPE_AGENT_DISPATCH:
           air_printf("Dispatching agent dispatch packet\n\r");
-          handle_agent_dispatch_packet(amd_queue, mb_id);
+          handle_agent_dispatch_packet(amd_queue, mb_id, hqd_id);
           break;
         case HSA_PACKET_TYPE_BARRIER_AND:
           handle_barrier_and_packet(amd_queue, mb_id);

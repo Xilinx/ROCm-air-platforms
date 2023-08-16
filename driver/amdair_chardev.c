@@ -20,6 +20,7 @@
 #include <linux/processor.h>
 #include <linux/pci.h>
 
+#include "amdair_admin_aql_queue.h"
 #include "amdair_chardev.h"
 #include "amdair_device.h"
 #include "amdair_doorbell.h"
@@ -493,7 +494,7 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 
 		args->queue_id = queue_id;
 		args->doorbell_id = db_id;
-		air_dev->dev_init_funcs->set_device_heap(air_dev, queue_id,
+		air_dev->dev_asic_funcs->set_device_heap(air_dev, queue_id,
 							 args->dram_heap_vaddr);
 
 		args->doorbell_offset
@@ -651,33 +652,37 @@ static ssize_t address_store(struct kobject *kobj, struct attribute *attr,
 static ssize_t value_show(struct kobject *kobj, struct attribute *attr,
 			  char *buf)
 {
-	uint32_t value;
-	struct amdair_device *drv_priv =
-		container_of(kobj, struct amdair_device, kobj_aie);
-	uint64_t offset = drv_priv->mem_addr;
+	struct amdair_device *air_dev = container_of(kobj, struct amdair_device,
+						     kobj_aie);
+	uint64_t arg[4] = { air_dev->mem_addr, 0, 0, 0 };
+	uint16_t pkt_func = AQL_AIR_PKT_TYPE_READ_AIE_REG32;
 
-	if (validate_aie_address(offset, drv_priv)) {
+	if (validate_aie_address(arg[0], air_dev) != AIE_ADDR_OK) {
 		snprintf(buf, PAGE_SIZE, "0xffffffff\n");
 		return strlen(buf) + 1;
 	}
 
-	value = ioread32(drv_priv->aie_bar + offset);
+	air_dev->dev_asic_funcs->send_admin_queue_cmd_and_wait(air_dev,
+							       pkt_func, arg,
+							       2);
 
-	snprintf(buf, PAGE_SIZE, "0x%x\n", value);
+	snprintf(buf, PAGE_SIZE, "0x%x\n", (uint32_t)(arg[2] & 0xffffffffULL));
 	return strlen(buf) + 1;
 }
 
 static ssize_t value_store(struct kobject *kobj, struct attribute *attr,
 			   const char *buf, size_t count)
 {
-	uint32_t value;
-	struct amdair_device *drv_priv =
-		container_of(kobj, struct amdair_device, kobj_aie);
-	uint64_t offset = drv_priv->mem_addr;
+	struct amdair_device *air_dev = container_of(kobj, struct amdair_device,
+						     kobj_aie);
+	uint64_t arg[4] = { air_dev->mem_addr, 0, 0, 0 };
+	uint16_t pkt_func = AQL_AIR_PKT_TYPE_WRITE_AIE_REG32;
 
-	if (validate_aie_address(offset, drv_priv) == AIE_ADDR_OK) {
-		kstrtouint(buf, 0, &value);
-		iowrite32(value, drv_priv->aie_bar + offset);
+	if (validate_aie_address(arg[0], air_dev) == AIE_ADDR_OK) {
+		kstrtouint(buf, 0, (uint32_t*)(&arg[1]));
+		air_dev->dev_asic_funcs->send_admin_queue_cmd_and_wait(air_dev,
+								       pkt_func,
+								       arg, 2);
 	}
 
 	return count;
