@@ -31,6 +31,8 @@ importsources -name acdc_agent -soft-link -path [file join $root_directory "runt
 importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/platform.h"]
 importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/arm_bp_intf.cpp"]
 importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/arm_bp_intf.h"]
+importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/shell.cpp"]
+importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/shell.h"]
 app config -name acdc_agent include-path [file join $root_directory "runtime_lib/airhost/include"]
 app config -name acdc_agent include-path [file join $root_directory "runtime_lib/controller/bp/include/"]
 

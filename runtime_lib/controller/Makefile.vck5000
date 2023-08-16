@@ -20,7 +20,7 @@ ${BUILD_DIR}/${APP_NAME}/acdc_agent.elf : ../../platforms/xilinx_vck5000_air/viv
 
 fixup: ${BUILD_DIR}/${APP_NAME}/src/lscript.ld
 	echo -e "\nModifying $< to increase the stack and heap size\n"; \
-	sed -i 's/_SIZE : 0x2000/_SIZE : 0x4000/g' $<; \
+	sed -i 's/_SIZE : 0x100000/_SIZE : 0x100000/g' $<; \
 	cd ${BUILD_DIR}/${APP_NAME}/Debug && make acdc_agent.elf
 
 clean:
