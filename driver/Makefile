@@ -1,3 +1,6 @@
+# Copyright (C) 2023, Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
 # https://www.kernel.org/doc/html/latest/kbuild/modules.html
 
 obj-m := amdair.o

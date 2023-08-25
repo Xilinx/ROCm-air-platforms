@@ -1,3 +1,6 @@
+// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
+
 #ifndef AMDAIR_DOORBELL_H_
 #define AMDAIR_DOORBELL_H_
 
@@ -5,8 +8,8 @@
 
 struct amdair_device;
 
-#define MAX_HW_DOORBELL_PAGES 16
-#define DOORBELL_INVALID_ID 0xFFFFFFFFU
+#define MAX_HW_DOORBELL_PAGES	16
+#define DOORBELL_INVALID_ID	0xFFFFFFFFU
 
 /**
  * struct amdair_doorbell - Holds information about a device's doorbell

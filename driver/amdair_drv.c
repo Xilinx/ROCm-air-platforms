@@ -13,24 +13,23 @@
 static const char air_dev_name[] = "amdair";
 bool enable_aie;
 
-static int amdair_pci_probe(struct pci_dev *pdev,
-			    const struct pci_device_id *ent);
+static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
 static void amdair_pci_remove(struct pci_dev *pdev);
 
 static struct pci_device_id amdair_pci_id_table[] = {
 	{ PCI_DEVICE(0x10EE, 0xB034), .driver_data = AMDAIR_DEV_VCK5000 },
-	{
-		0,
-	}
+	{ 0, }
 };
 
 MODULE_DEVICE_TABLE(pci, amdair_pci_id_table);
 
 /* Driver registration structure */
-static struct pci_driver amdair_pci_driver = { .name = air_dev_name,
-					       .id_table = amdair_pci_id_table,
-					       .probe = amdair_pci_probe,
-					       .remove = amdair_pci_remove };
+static struct pci_driver amdair_pci_driver = {
+	.name = air_dev_name,
+	.id_table = amdair_pci_id_table,
+	.probe = amdair_pci_probe,
+	.remove = amdair_pci_remove
+};
 
 /*
 	Register the driver with the PCI subsystem
@@ -49,8 +48,7 @@ static void __exit amdair_exit(void)
 	pci_unregister_driver(&amdair_pci_driver);
 }
 
-static int amdair_pci_probe(struct pci_dev *pdev,
-			    const struct pci_device_id *ent)
+static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct amdair_device *air_dev = NULL;
 	enum amdair_device_type device_type = ent->driver_data;

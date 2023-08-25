@@ -4,8 +4,8 @@
 #ifndef AMDAIR_PROCESS_H_
 #define AMDAIR_PROCESS_H_
 
-#include <linux/interval_tree.h>
 #include <linux/idr.h>
+#include <linux/interval_tree.h>
 
 #include "amdair_device.h"
 
@@ -53,10 +53,10 @@ struct amdair_process_device {
 int amdair_process_device_create_bo_handle(struct amdair_process_device *air_pd,
 					   uint32_t type_flags, uint64_t base,
 					   uint64_t size, int *handle);
-int amdair_process_device_destroy_bo_handle(
+int amdair_process_device_destroy_bo_handle(struct amdair_process_device *air_pd,
+					    int handle);
+struct amdair_buf_object* amdair_process_device_find_bo(
 	struct amdair_process_device *air_pd, int handle);
-struct amdair_buf_object *
-amdair_process_device_find_bo(struct amdair_process_device *air_pd, int handle);
 
 /**
  * struct amdair_process - Per process information.

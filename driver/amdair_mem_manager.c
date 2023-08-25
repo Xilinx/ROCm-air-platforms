@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (C) 2023, Advanced Micro Devices, Inc.
 
-#include "amdair_mem_manager.h"
-
 #include <linux/pci.h>
 
 #include "amdair_device.h"
+#include "amdair_mem_manager.h"
 #include "amdair_object.h"
 
 int amdair_mman_init(struct amdair_device *air_dev)
@@ -33,10 +32,10 @@ int amdair_mman_init(struct amdair_device *air_dev)
 		}
 
 		air_bo->dev = air_dev;
-		air_bo->it_node.start =
-			air_dev->dram_base + i * DRAM_HEAP_SIZE_PER_PROCESS;
-		air_bo->it_node.last =
-			air_bo->it_node.start + DRAM_HEAP_SIZE_PER_PROCESS - 1;
+		air_bo->it_node.start
+			= air_dev->dram_base + i * DRAM_HEAP_SIZE_PER_PROCESS;
+		air_bo->it_node.last = air_bo->it_node.start
+			+ DRAM_HEAP_SIZE_PER_PROCESS - 1;
 		air_bo->heap_type = BO_HEAP_TYPE_DRAM;
 
 		interval_tree_insert(&air_bo->it_node,
@@ -59,9 +58,9 @@ int amdair_mman_alloc_dram(struct amdair_mem_manager *air_mman,
 	if (!air_dev)
 		return -EINVAL;
 
-	it_node = interval_tree_iter_first(
-		&air_dev->mman.dram_heap_free, air_dev->dram_base,
-		air_dev->dram_base + air_dev->dram_size);
+	it_node = interval_tree_iter_first(&air_dev->mman.dram_heap_free,
+					   air_dev->dram_base,
+					   air_dev->dram_base + air_dev->dram_size);
 
 	if (!it_node || (it_node->last - it_node->start + 1) < size)
 		return -ENOMEM;
@@ -90,30 +89,32 @@ void amdair_mman_free_resources(struct amdair_mem_manager *air_mman)
 	struct amdair_buf_object *air_bo = NULL;
 	struct interval_tree_node *it_node = NULL;
 
-	it_node = interval_tree_iter_first(
-		&air_dev->mman.dram_heap_free, air_dev->dram_base,
-		air_dev->dram_base + air_dev->dram_size);
+	it_node = interval_tree_iter_first(&air_dev->mman.dram_heap_free,
+					   air_dev->dram_base,
+					   air_dev->dram_base + air_dev->dram_size);
 	while (it_node) {
 		air_bo = container_of(it_node, struct amdair_buf_object,
 				      it_node);
 		kfree(air_bo);
 		interval_tree_remove(it_node, &air_dev->mman.dram_heap_free);
-		it_node = interval_tree_iter_first(
-			&air_dev->mman.dram_heap_free, air_dev->dram_base,
-			air_dev->dram_base + air_dev->dram_size);
+		it_node = interval_tree_iter_first(&air_dev->mman.dram_heap_free,
+						   air_dev->dram_base,
+						   air_dev->dram_base
+						   + air_dev->dram_size);
 	}
 
-	it_node = interval_tree_iter_first(
-		&air_dev->mman.dram_heap_allocated, air_dev->dram_base,
-		air_dev->dram_base + air_dev->dram_size);
+	it_node = interval_tree_iter_first(&air_dev->mman.dram_heap_allocated,
+					   air_dev->dram_base,
+					   air_dev->dram_base + air_dev->dram_size);
 	while (it_node) {
 		air_bo = container_of(it_node, struct amdair_buf_object,
 				      it_node);
 		kfree(air_bo);
 		interval_tree_remove(it_node,
 				     &air_dev->mman.dram_heap_allocated);
-		it_node = interval_tree_iter_first(
-			&air_dev->mman.dram_heap_allocated, air_dev->dram_base,
-			air_dev->dram_base + air_dev->dram_size);
+		it_node = interval_tree_iter_first(&air_dev->mman.dram_heap_allocated,
+						   air_dev->dram_base,
+						   air_dev->dram_base
+						   + air_dev->dram_size);
 	}
 }

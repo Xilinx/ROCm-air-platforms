@@ -1,24 +1,25 @@
 // Copyright (C) 2023, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 
-#include <stddef.h>
-#include <linux/device.h>
-#include <linux/export.h>
-#include <linux/err.h>
-#include <linux/fs.h>
-#include <linux/file.h>
-#include <linux/sched.h>
-#include <linux/slab.h>
-#include <linux/uaccess.h>
 #include <linux/compat.h>
-#include <linux/time.h>
+#include <linux/device.h>
+#include <linux/dma-buf.h>
+#include <linux/err.h>
+#include <linux/export.h>
+#include <linux/fdtable.h>
+#include <linux/file.h>
+#include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
-#include <linux/ptrace.h>
-#include <linux/dma-buf.h>
-#include <linux/fdtable.h>
-#include <linux/processor.h>
 #include <linux/pci.h>
+#include <linux/processor.h>
+#include <linux/ptrace.h>
+#include <linux/sched.h>
+#include <linux/slab.h>
+#include <linux/stddef.h>
+#include <linux/time.h>
+#include <linux/uaccess.h>
+#include <linux/version.h>
 
 #include "amdair_admin_aql_queue.h"
 #include "amdair_chardev.h"
@@ -33,11 +34,11 @@
  * Define an entry in the ioctl table. The entry's index equals the ioctl
  * number.
  */
-#define AMDAIR_IOCTL_DEF(ioctl, _func, _flags)                                 \
-	[_IOC_NR(ioctl)] = { .cmd = ioctl,                                     \
-			     .func = _func,                                    \
-			     .flags = _flags,                                  \
-			     .cmd_drv = 0,                                     \
+#define AMDAIR_IOCTL_DEF(ioctl, _func, _flags)	\
+	[_IOC_NR(ioctl)] = { .cmd = ioctl,	\
+			     .func = _func,	\
+			     .flags = _flags,	\
+			     .cmd_drv = 0,	\
 			     .name = #ioctl }
 
 /**
@@ -53,39 +54,37 @@
 #define AMDAIR_MMAP_TYPE_QUEUE 0x1ULL
 #define AMDAIR_MMAP_TYPE_QUEUE_BUF 0x2ULL
 #define AMDAIR_MMAP_TYPE_BO 0x3ULL
-#define AMDAIR_MMAP_GET_TYPE(offset_)                                          \
-	((offset_ >> (AMDAIR_MMAP_TYPE_SHIFT)) & AMDAIR_MMAP_TYPE_MASK)
+#define AMDAIR_MMAP_GET_TYPE(offset_) ((offset_ >> (AMDAIR_MMAP_TYPE_SHIFT)) \
+	& AMDAIR_MMAP_TYPE_MASK)
 
 #define AMDAIR_MMAP_DEV_ID_SHIFT 54ULL
 #define AMDAIR_MMAP_DEV_ID_WIDTH 8ULL
 #define AMDAIR_MMAP_DEV_ID_MASK ((1ULL << (AMDAIR_MMAP_DEV_ID_WIDTH)) - 1ULL)
-#define AMDAIR_MMAP_GET_DEV_ID(offset_)                                        \
+#define AMDAIR_MMAP_GET_DEV_ID(offset_) \
 	((offset_ >> (AMDAIR_MMAP_DEV_ID_SHIFT)) & (AMDAIR_MMAP_DEV_ID_MASK))
 
 #define AMDAIR_MMAP_BO_HANDLE_SHIFT 38ULL
 #define AMDAIR_MMAP_BO_HANDLE_WIDTH 16ULL
-#define AMDAIR_MMAP_BO_HANDLE_MASK                                             \
-	((1ULL << (AMDAIR_MMAP_BO_HANDLE_WIDTH)) - 1ULL)
-#define AMDAIR_MMAP_BO_GET_HANDLE(offset_)                                     \
-	((offset_ >> (AMDAIR_MMAP_BO_HANDLE_SHIFT)) &                          \
-	 (AMDAIR_MMAP_BO_HANDLE_MASK))
+#define AMDAIR_MMAP_BO_HANDLE_MASK ((1ULL << (AMDAIR_MMAP_BO_HANDLE_WIDTH)) - 1ULL)
+#define AMDAIR_MMAP_BO_GET_HANDLE(offset_) \
+	((offset_ >> (AMDAIR_MMAP_BO_HANDLE_SHIFT)) \
+		& (AMDAIR_MMAP_BO_HANDLE_MASK))
 
 #define AMDAIR_MMAP_QUEUE_ID_SHIFT 35ULL
 #define AMDAIR_MMAP_QUEUE_ID_WIDTH 3ULL
-#define AMDAIR_MMAP_QUEUE_ID_MASK                                              \
-	((1ULL << (AMDAIR_MMAP_QUEUE_ID_WIDTH)) - 1ULL)
-#define AMDAIR_MMAP_GET_QUEUE_ID(offset_)                                      \
-	((offset_ >> (AMDAIR_MMAP_QUEUE_ID_SHIFT)) &                           \
-	 (AMDAIR_MMAP_QUEUE_ID_MASK))
+#define AMDAIR_MMAP_QUEUE_ID_MASK ((1ULL << (AMDAIR_MMAP_QUEUE_ID_WIDTH)) - 1ULL)
+#define AMDAIR_MMAP_GET_QUEUE_ID(offset_) \
+	((offset_ >> (AMDAIR_MMAP_QUEUE_ID_SHIFT)) \
+		& (AMDAIR_MMAP_QUEUE_ID_MASK))
 
-#define AMDAIR_MMAP_CREATE_OFFSET(type_, dev_id_, bo_handle_, queue_id_)       \
-	(((type_ & (AMDAIR_MMAP_TYPE_MASK)) << (AMDAIR_MMAP_TYPE_SHIFT)) |     \
-	 ((dev_id_ & (AMDAIR_MMAP_DEV_ID_MASK))                                \
-	  << (AMDAIR_MMAP_DEV_ID_SHIFT)) |                                     \
-	 ((bo_handle_ & (AMDAIR_MMAP_BO_HANDLE_MASK))                          \
-	  << (AMDAIR_MMAP_BO_HANDLE_SHIFT)) |                                  \
-	 ((queue_id_ & (AMDAIR_MMAP_QUEUE_ID_MASK))                            \
-	  << (AMDAIR_MMAP_QUEUE_ID_SHIFT)))
+#define AMDAIR_MMAP_CREATE_OFFSET(type_, dev_id_, bo_handle_, queue_id_) \
+	(((type_ & (AMDAIR_MMAP_TYPE_MASK)) << (AMDAIR_MMAP_TYPE_SHIFT)) \
+	| ((dev_id_ & (AMDAIR_MMAP_DEV_ID_MASK)) \
+		<< (AMDAIR_MMAP_DEV_ID_SHIFT)) \
+	| ((bo_handle_ & (AMDAIR_MMAP_BO_HANDLE_MASK)) \
+		<< (AMDAIR_MMAP_BO_HANDLE_SHIFT)) \
+	| ((queue_id_ & (AMDAIR_MMAP_QUEUE_ID_MASK)) \
+		<< (AMDAIR_MMAP_QUEUE_ID_SHIFT)))
 
 enum aie_address_validation {
 	AIE_ADDR_OK,
@@ -177,15 +176,19 @@ static struct device *amdair_chardev;
 static const struct amdair_ioctl_desc amdair_ioctl_table[] = {
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_GET_VERSION, amdair_ioctl_get_version, 0),
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_CREATE_QUEUE, amdair_ioctl_create_queue, 0),
-	AMDAIR_IOCTL_DEF(AMDAIR_IOC_DESTROY_QUEUE, amdair_ioctl_destroy_queue,
-			 0),
+	AMDAIR_IOCTL_DEF(AMDAIR_IOC_DESTROY_QUEUE,
+			 amdair_ioctl_destroy_queue, 0),
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_ALLOC_DEVICE_MEMORY,
 			 amdair_ioctl_alloc_device_memory, 0),
 	AMDAIR_IOCTL_DEF(AMDAIR_IOC_FREE_DEVICE_MEMORY,
 			 amdair_ioctl_free_device_memory, 0),
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,2,0)
+static char *amdair_devnode(const struct device *dev, umode_t *mode)
+#else
 static char *amdair_devnode(struct device *dev, umode_t *mode)
+#endif
 {
 	if (mode)
 		*mode = 0666;
@@ -208,8 +211,9 @@ int amdair_chardev_init(struct pci_dev *pdev)
 		goto err_class;
 
 	amdair_class->devnode = amdair_devnode;
-	amdair_chardev = device_create(amdair_class, &pdev->dev,
-				       MKDEV(chardev_major, 0), pdev, "amdair");
+	amdair_chardev =
+		device_create(amdair_class, &pdev->dev,
+			      MKDEV(chardev_major, 0), pdev, "amdair");
 
 	ret = PTR_ERR(amdair_chardev);
 	if (IS_ERR(amdair_chardev))
@@ -357,27 +361,28 @@ static int amdair_mmap(struct file *filp, struct vm_area_struct *vma)
 	int handle = AMDAIR_MMAP_BO_GET_HANDLE(mmap_offset);
 	int ret = 0;
 
-	ret = amdair_process_get_process_device(air_process, dev_id, &air_pd);
+	ret = amdair_process_get_process_device(air_process, dev_id,
+						&air_pd);
 	if (ret)
 		return ret;
 
-	dev_info(&air_pd->dev->pdev->dev, "%s: offset %llx", __func__,
-		 mmap_offset);
+        dev_info(&air_pd->dev->pdev->dev, "%s: offset %llx", __func__,
+	         mmap_offset);
 
 	switch (AMDAIR_MMAP_GET_TYPE(mmap_offset)) {
 	case AMDAIR_MMAP_TYPE_DOORBELL:
-		start = air_pd->dev->doorbell.base +
-			air_pd->db_page_id * PAGE_SIZE;
+		start = air_pd->dev->doorbell.base
+			+ air_pd->db_page_id * PAGE_SIZE;
 		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_QUEUE:
-		start = air_pd->dev->queue_mgr.queue_base +
-			queue_id * PAGE_SIZE;
+		start = air_pd->dev->queue_mgr.queue_base
+			+ queue_id * PAGE_SIZE;
 		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_QUEUE_BUF:
-		start = air_pd->dev->queue_mgr.queue_buf_base +
-			queue_id * PAGE_SIZE;
+		start = air_pd->dev->queue_mgr.queue_buf_base
+			+ queue_id * PAGE_SIZE;
 		end = start + size;
 		break;
 	case AMDAIR_MMAP_TYPE_BO:
@@ -385,7 +390,7 @@ static int amdair_mmap(struct file *filp, struct vm_area_struct *vma)
 
 		if (!air_bo) {
 			dev_err(&air_pd->dev->pdev->dev,
-				"%s: No object with handle %d", __func__,
+			        "%s: No object with handle %d", __func__,
 				handle);
 			return -EINVAL;
 		}
@@ -416,6 +421,7 @@ static int amdair_mmap(struct file *filp, struct vm_area_struct *vma)
 		return -EFAULT;
 	}
 
+	
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 
 	/* io_remap_pfn_range will mark the range VM_IO. */
@@ -496,16 +502,19 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 		air_dev->dev_asic_funcs->set_device_heap(air_dev, queue_id,
 							 args->dram_heap_vaddr);
 
-		args->doorbell_offset = AMDAIR_MMAP_CREATE_OFFSET(
-			AMDAIR_MMAP_TYPE_DOORBELL, args->device_id, 0, 0);
-		args->queue_offset = AMDAIR_MMAP_CREATE_OFFSET(
-			AMDAIR_MMAP_TYPE_QUEUE, args->device_id, 0, queue_id);
-		args->queue_buf_offset =
-			AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_QUEUE_BUF,
-						  args->device_id, 0, queue_id);
+		args->doorbell_offset
+			= AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_DOORBELL,
+						    args->device_id, 0, 0);
+		args->queue_offset
+			= AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_QUEUE,
+						    args->device_id, 0,
+						    queue_id);
+		args->queue_buf_offset
+			= AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_QUEUE_BUF,
+						    args->device_id, 0,
+						    queue_id);
 
-		dev_info(amdair_chardev,
-			 "doorbell offset %llx, "
+		dev_info(amdair_chardev, "doorbell offset %llx, "
 			 "queue offset %llx, queue_id %x, db_id %x, dev id %d "
 			 "DRAM heap CPU VA %llx",
 			 args->doorbell_offset, args->queue_offset, queue_id,
@@ -535,8 +544,8 @@ static int amdair_ioctl_destroy_queue(struct file *filp, void *data,
 				      struct amdair_process *air_process)
 {
 	struct amdair_destroy_queue_args *args = data;
-	struct amdair_device *air_dev =
-		amdair_device_get_by_id(args->device_id);
+	struct amdair_device *air_dev
+		= amdair_device_get_by_id(args->device_id);
 	int ret = 0;
 
 	if (!air_dev || air_dev->device_id != args->device_id)
@@ -567,20 +576,20 @@ static int amdair_ioctl_alloc_device_memory(struct file *filp, void *data,
 
 	if (ret)
 		return ret;
-
+	
 	base = air_pd->dev->dram_base;
 	ret = amdair_process_device_create_bo_handle(air_pd, args->flags, base,
 						     args->size, &handle);
 	if (ret)
 		return ret;
-
+	
 	args->handle = handle;
-	args->mmap_offset = AMDAIR_MMAP_CREATE_OFFSET(
-		AMDAIR_MMAP_TYPE_BO, args->device_id, handle, 0);
-	dev_info(&air_pd->dev->pdev->dev,
-		 "%s: Created buffer object, "
-		 "handle %d, mmap offset %llx, size %llx",
-		 __func__, handle, args->mmap_offset, args->size);
+	args->mmap_offset = AMDAIR_MMAP_CREATE_OFFSET(AMDAIR_MMAP_TYPE_BO,
+						      args->device_id, handle,
+						      0);
+	dev_info(&air_pd->dev->pdev->dev, "%s: Created buffer object, "
+		 "handle %d, mmap offset %llx, size %llx", __func__, handle,
+		 args->mmap_offset, args->size);
 
 	return 0;
 }
@@ -614,7 +623,7 @@ static int validate_aie_address(uint64_t offset, struct amdair_device *dev)
 	}
 
 	/* range within the specified BAR */
-	if (offset >= dev->dev_asic_funcs->get_aie_mem_range()) {
+	if (offset >= dev->dev_asic_funcs->get_aie_mem_range()) { 
 		printk("%s: invalid offset 0x%llx (max 0x%llx)\n", __func__,
 		       offset, dev->dev_asic_funcs->get_aie_mem_range());
 		return AIE_ADDR_RANGE;
@@ -648,8 +657,8 @@ static ssize_t address_store(struct kobject *kobj, struct attribute *attr,
 static ssize_t value_show(struct kobject *kobj, struct attribute *attr,
 			  char *buf)
 {
-	struct amdair_device *air_dev =
-		container_of(kobj, struct amdair_device, kobj_aie);
+	struct amdair_device *air_dev = container_of(kobj, struct amdair_device,
+						     kobj_aie);
 	uint64_t arg[4] = { air_dev->mem_addr, 0, 0, 0 };
 	uint16_t pkt_func = AQL_AIR_PKT_TYPE_READ_AIE_REG32;
 
@@ -658,8 +667,9 @@ static ssize_t value_show(struct kobject *kobj, struct attribute *attr,
 		return strlen(buf) + 1;
 	}
 
-	air_dev->dev_asic_funcs->send_admin_queue_cmd_and_wait(
-		air_dev, pkt_func, arg, 2);
+	air_dev->dev_asic_funcs->send_admin_queue_cmd_and_wait(air_dev,
+							       pkt_func, arg,
+							       2);
 
 	snprintf(buf, PAGE_SIZE, "0x%x\n", (uint32_t)(arg[2] & 0xffffffffULL));
 	return strlen(buf) + 1;
@@ -668,15 +678,16 @@ static ssize_t value_show(struct kobject *kobj, struct attribute *attr,
 static ssize_t value_store(struct kobject *kobj, struct attribute *attr,
 			   const char *buf, size_t count)
 {
-	struct amdair_device *air_dev =
-		container_of(kobj, struct amdair_device, kobj_aie);
+	struct amdair_device *air_dev = container_of(kobj, struct amdair_device,
+						     kobj_aie);
 	uint64_t arg[4] = { air_dev->mem_addr, 0, 0, 0 };
 	uint16_t pkt_func = AQL_AIR_PKT_TYPE_WRITE_AIE_REG32;
 
 	if (validate_aie_address(arg[0], air_dev) == AIE_ADDR_OK) {
-		kstrtouint(buf, 0, (uint32_t *)(&arg[1]));
-		air_dev->dev_asic_funcs->send_admin_queue_cmd_and_wait(
-			air_dev, pkt_func, arg, 2);
+		kstrtouint(buf, 0, (uint32_t*)(&arg[1]));
+		air_dev->dev_asic_funcs->send_admin_queue_cmd_and_wait(air_dev,
+								       pkt_func,
+								       arg, 2);
 	}
 
 	return count;

@@ -71,7 +71,7 @@ struct __attribute__((aligned(PAGE_SIZE))) HsaControlStatusRegs {
 static_assert(sizeof(HsaControlStatusRegs) == PAGE_SIZE,
               "HsaControlStatusRegs must be aligned to a single page.");
 static_assert(NUM_AQL_QUEUES * sizeof(amd_queue_t) <= PAGE_SIZE,
-              "Only one page worth of queue descriptors is supported.");
+	      "Only one page worth of queue descriptors is supported.");
 
 extern HsaControlStatusRegs *hsa_csr;
 

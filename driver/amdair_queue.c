@@ -1,5 +1,7 @@
-#include "amdair_queue.h"
+// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
 
+#include "amdair_queue.h"
 #include "amdair_device.h"
 
 int amdair_queue_find_free(struct amdair_device *air_dev)

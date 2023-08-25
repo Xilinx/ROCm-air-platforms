@@ -1,18 +1,6 @@
 # AMD AIR Driver
 
-This is a Linux kernel driver to manage the VCK5000 PCIe card. It exposes a
-character device /dev/amdair for interfacing with user space applications.
-Applications can use the mmap() system call to access the DRAM and BRAM
-memory regions on the card. This is a very raw and low-level interface so it
-requires most of the logic concerning how to program the card to be in user
-space libraries. Part of the low-level interface is the AIE memory range, to
-address the AIE engines directly. This use is deprecated but still widely used
-by our test code. This memory range is disabled by default but can be enabled
-through a module parameter (see the section on Loading for more details).
-
-It is designed to use the same ioctl interface (function numbers and
-parameters) as the KFD driver, used by ROCm primarily for GPUs. Many of these
-functions are not yet implemented as this is an early stage of development.
+This is a Linux kernel driver which is utilized by our [experimental ROCm runtime](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air) to target AMD AI Engine devices. Currently, the only platform supported by this driver is our [VCK5000 PCIe platform](../platform/vck5000).
 
 ## Compiling
 
@@ -28,6 +16,11 @@ To compile the driver, you will need the standard build tools for the Linux
 kernel. You can install the 'build-essentials' package on your distro to get
 these tools if you don't have them already installed.
 
+To build the driver run:
+```
+make
+```
+
 ## Loading and Unloading
 
 The driver will not load automatically since it is build out-of-tree and the
@@ -37,13 +30,6 @@ level to load a kernel module ('sudo' will do):
 
 ```
 insmod amdair.ko
-```
-
-If you want to pass a module parameter (e.g. to enable the AIE memory region),
-you can do it like this:
-
-```
-insmod amdair.ko enable_aie=1
 ```
 
 To unload the module, use the 'rmmod' tool with the module name:
@@ -77,9 +63,6 @@ they cannot be used by this version of the driver.
 
 Only one queue can be used from the card. If you try to allocate more queues
 it will not work. This is also a limitation of the card's firmware.
-
-Most KFD ioctl functions are not yet implemented. The ones that are relevant
-to this card will be implemented eventually.
 
 
 -----

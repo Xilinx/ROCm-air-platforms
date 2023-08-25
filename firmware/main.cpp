@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+
 #include "unistd.h"
 #include <cstdint>
 #include <cstring>
@@ -58,7 +59,7 @@ extern "C" {
 #define HIGH_ADDR(addr) ((addr & 0xffffffff00000000ULL) >> 32)
 #define LOW_ADDR(addr) (addr & 0x00000000ffffffffULL)
 
-#define ALIGN(_x, _size) (((_x) + (_size - 1)) & ~(_size - 1))
+#define ALIGN(_x, _size) (((_x) + (_size-1)) & ~(_size-1))
 
 #define LOGICAL_HERD_DMAS 16
 
@@ -213,20 +214,22 @@ aie_libxaie_ctx_t *_xaie;
 /*
   read 32 bit value from specified address
 */
-static inline u32 in32(u64 Addr) {
-  u32 Value = IO_READ32(Addr);
+static inline uint32_t in32(uint64_t Addr) {
+  uint32_t Value = IO_READ32(Addr);
   return Value;
 }
 
 /*
   write 32 bit value to specified address
 */
-static inline void out32(u64 Addr, u32 Value) { IO_WRITE32(Addr, Value); }
+static inline void out32(uint64_t Addr, uint32_t Value) {
+  IO_WRITE32(Addr, Value);
+}
 
-u32 maskpoll32(u64 Addr, u32 Mask, u32 Value, u32 TimeOut) {
-  u32 Ret = 1;
+uint32_t maskpoll32(uint64_t Addr, uint32_t Mask, uint32_t Value, uint32_t TimeOut) {
+  uint32_t Ret = 1;
 
-  u32 Count = 10 + TimeOut;
+  uint32_t Count = 10 + TimeOut;
 
   while (Count > 0U) {
     if ((in32(Addr) & Mask) == Value) {
@@ -242,14 +245,14 @@ u32 maskpoll32(u64 Addr, u32 Mask, u32 Value, u32 TimeOut) {
 /*
   Calculate the address of an AIE tile
 */
-u64 getTileAddr(u16 ColIdx, u16 RowIdx) {
+uint64_t getTileAddr(uint16_t ColIdx, uint16_t RowIdx) {
 #ifdef ARM_CONTROLLER
-  u64 my_ta = (u64)(AIE_BASE | (ColIdx << AIE_COLUMN_SHIFT) |
+  uint64_t my_ta = (uint64_t)(AIE_BASE | (ColIdx << AIE_COLUMN_SHIFT) |
                     (RowIdx << AIE_ROW_SHIFT));
   return my_ta;
 #else
-  u64 TileAddr = 0;
-  u64 ArrOffset = XAIE_ADDR_ARRAY_OFF;
+  uint64_t TileAddr = 0;
+  uint64_t ArrOffset = XAIE_ADDR_ARRAY_OFF;
 
 #ifdef XAIE_BASE_ARRAY_ADDR_OFFSET
   ArrOffset = XAIE_BASE_ARRAY_ADDR_OFFSET;
@@ -263,7 +266,7 @@ u64 getTileAddr(u16 ColIdx, u16 RowIdx) {
    * | Array offset | Column | Row | Tile addr  |
    * --------------------------------------------
    */
-  TileAddr = (u64)((ArrOffset << XAIEGBL_TILE_ADDR_ARR_SHIFT) |
+  TileAddr = (uint64_t)((ArrOffset << XAIEGBL_TILE_ADDR_ARR_SHIFT) |
                    (ColIdx << XAIEGBL_TILE_ADDR_COL_SHIFT) |
                    (RowIdx << XAIEGBL_TILE_ADDR_ROW_SHIFT));
 
@@ -360,19 +363,19 @@ int mlir_aie_reinit_device(aie_libxaie_ctx_t *ctx) {
 }
 
 void mlir_aie_print_dma_status(int col, int row) {
-  u64 tileAddr = getTileAddr(col, row);
+  uint64_t tileAddr = getTileAddr(col, row);
 
-  u32 dma_s2mm0_control = in32(tileAddr + 0x0001DE00);
-  u32 dma_s2mm1_control = in32(tileAddr + 0x0001DE08);
-  u32 dma_mm2s0_control = in32(tileAddr + 0x0001DE10);
-  u32 dma_mm2s1_control = in32(tileAddr + 0x0001DE18);
-  u32 dma_s2mm_status = in32(tileAddr + 0x0001DF00);
-  u32 dma_mm2s_status = in32(tileAddr + 0x0001DF10);
+  uint32_t dma_s2mm0_control = in32(tileAddr + 0x0001DE00);
+  uint32_t dma_s2mm1_control = in32(tileAddr + 0x0001DE08);
+  uint32_t dma_mm2s0_control = in32(tileAddr + 0x0001DE10);
+  uint32_t dma_mm2s1_control = in32(tileAddr + 0x0001DE18);
+  uint32_t dma_s2mm_status = in32(tileAddr + 0x0001DF00);
+  uint32_t dma_mm2s_status = in32(tileAddr + 0x0001DF10);
 
-  u32 s2mm_ch0_running = dma_s2mm_status & 0x3;
-  u32 s2mm_ch1_running = (dma_s2mm_status >> 2) & 0x3;
-  u32 mm2s_ch0_running = dma_mm2s_status & 0x3;
-  u32 mm2s_ch1_running = (dma_mm2s_status >> 2) & 0x3;
+  uint32_t s2mm_ch0_running = dma_s2mm_status & 0x3;
+  uint32_t s2mm_ch1_running = (dma_s2mm_status >> 2) & 0x3;
+  uint32_t mm2s_ch0_running = dma_mm2s_status & 0x3;
+  uint32_t mm2s_ch1_running = (dma_mm2s_status >> 2) & 0x3;
 
   xil_printf("DMA [%d, %d] tile addr=0x%lx\r\n", col, row, tileAddr);
   xil_printf("  mm2s (0=%s 1=%s) status=%08X ctrl0=%02X ctrl1=%02X\r\n",
@@ -386,14 +389,14 @@ void mlir_aie_print_dma_status(int col, int row) {
 
   xil_printf("Descriptors:\r\n");
   for (uint32_t bd = 0; bd < NUM_BD; bd++) {
-    u32 dma_bd_addr_a = in32(tileAddr + REG_AIE_DMA_BD_ADDR_A(bd));
-    u32 dma_bd_control = in32(tileAddr + REG_AIE_DMA_BD_CTL(bd));
+    uint32_t dma_bd_addr_a = in32(tileAddr + REG_AIE_DMA_BD_ADDR_A(bd));
+    uint32_t dma_bd_control = in32(tileAddr + REG_AIE_DMA_BD_CTL(bd));
     if (dma_bd_control & AIE_DMA_BD_CTL_VALID) {
       xil_printf("BD %d valid\n\r", bd);
-      u32 current_s2mm_ch0 = (dma_s2mm_status >> 16) & 0xf;
-      u32 current_s2mm_ch1 = (dma_s2mm_status >> 20) & 0xf;
-      u32 current_mm2s_ch0 = (dma_mm2s_status >> 16) & 0xf;
-      u32 current_mm2s_ch1 = (dma_mm2s_status >> 20) & 0xf;
+      uint32_t current_s2mm_ch0 = (dma_s2mm_status >> 16) & 0xf;
+      uint32_t current_s2mm_ch1 = (dma_s2mm_status >> 20) & 0xf;
+      uint32_t current_mm2s_ch0 = (dma_mm2s_status >> 16) & 0xf;
+      uint32_t current_mm2s_ch1 = (dma_mm2s_status >> 20) & 0xf;
 
       if (s2mm_ch0_running && bd == current_s2mm_ch0) {
         xil_printf(" * Current BD for s2mm channel 0\n\r");
@@ -409,7 +412,7 @@ void mlir_aie_print_dma_status(int col, int row) {
       }
 
       if (dma_bd_control & AIE_DMA_BD_CTL_ENA_PKT) {
-        u32 dma_packet = in32(tileAddr + REG_AIE_DMA_BD_PKT(bd));
+        uint32_t dma_packet = in32(tileAddr + REG_AIE_DMA_BD_PKT(bd));
         xil_printf("   Packet mode: %02X\n\r", dma_packet & AIE_DMA_BD_PKT_ID);
       }
       int words_to_transfer = 1 + (dma_bd_control & AIE_DMA_BD_CTL_LEN);
@@ -419,22 +422,22 @@ void mlir_aie_print_dma_status(int col, int row) {
 
       xil_printf("   ");
       for (int w = 0; w < 7; w++) {
-        u32 tmpd = in32(tileAddr + (base_address << 2) + (w * 4));
+        uint32_t tmpd = in32(tileAddr + (base_address << 2) + (w * 4));
         xil_printf("%08X ", tmpd);
       }
       xil_printf("\n\r");
       if (dma_bd_addr_a & AIE_DMA_BD_ADDR_ENA_ACQ) {
-        u32 lock_id = (dma_bd_addr_a >> 22) & 0xf;
+        uint32_t lock_id = (dma_bd_addr_a >> 22) & 0xf;
         xil_printf("   Acquires lock %d ", lock_id);
         if (dma_bd_addr_a & 0x10000)
           xil_printf("with value %d ", (dma_bd_addr_a >> 17) & 0x1);
 
         xil_printf("currently ");
-        u32 locks = in32(tileAddr + 0x0001EF00);
-        u32 two_bits = (locks >> (lock_id * 2)) & 0x3;
+        uint32_t locks = in32(tileAddr + 0x0001EF00);
+        uint32_t two_bits = (locks >> (lock_id * 2)) & 0x3;
         if (two_bits) {
-          u32 acquired = two_bits & 0x1;
-          u32 value = two_bits & 0x2;
+          uint32_t acquired = two_bits & 0x1;
+          uint32_t value = two_bits & 0x2;
           if (acquired)
             xil_printf("Acquired ");
           xil_printf(value ? "1" : "0");
@@ -444,11 +447,11 @@ void mlir_aie_print_dma_status(int col, int row) {
       }
       if (dma_bd_control & 0x30000000) { // FIFO MODE
         int FIFO = (dma_bd_control >> 28) & 0x3;
-        u32 dma_fifo_counter = in32(tileAddr + 0x0001DF20);
+        uint32_t dma_fifo_counter = in32(tileAddr + 0x0001DF20);
         xil_printf("   Using FIFO Cnt%d : %08X\n\r", FIFO, dma_fifo_counter);
       }
-      u32 nextBd = ((dma_bd_control >> 13) & 0xF);
-      u32 useNextBd = ((dma_bd_control >> 17) & 0x1);
+      uint32_t nextBd = ((dma_bd_control >> 13) & 0xF);
+      uint32_t useNextBd = ((dma_bd_control >> 17) & 0x1);
       xil_printf("   Next BD: %d %s\r\n", nextBd,
                  (useNextBd == 0) ? "(unused)" : "(used)");
     }
@@ -487,17 +490,17 @@ void mlir_aie_print_shimdma_status(uint16_t col) {
 
   xil_printf("Descriptors:\r\n");
   for (int bd = 0; bd < 16; bd++) {
-    u64 bd_addr_a = in32(tileAddr + REG_SHIM_DMA_BD_ADDR(bd));
-    u32 dma_bd_buffer_length = in32(tileAddr + REG_SHIM_DMA_BD_BUF_LEN(bd));
-    u32 dma_bd_control = in32(tileAddr + REG_SHIM_DMA_BD_CTRL(bd));
+    uint64_t bd_addr_a = in32(tileAddr + REG_SHIM_DMA_BD_ADDR(bd));
+    uint32_t dma_bd_buffer_length = in32(tileAddr + REG_SHIM_DMA_BD_BUF_LEN(bd));
+    uint32_t dma_bd_control = in32(tileAddr + REG_SHIM_DMA_BD_CTRL(bd));
 
     xil_printf("[%02d] ", bd);
     if (dma_bd_control & SHIM_DMA_BD_CTRL_VALID)
       xil_printf("valid ");
 
     int words_to_transfer = dma_bd_buffer_length;
-    u64 base_address =
-        (u64)bd_addr_a + ((u64)((dma_bd_control >> 16) & 0xFFFF) << 32);
+    uint64_t base_address =
+        (uint64_t)bd_addr_a + ((uint64_t)((dma_bd_control >> 16) & 0xFFFF) << 32);
     xil_printf("   Transferring %d 32 bit words to/from %08lX\n\r",
                words_to_transfer, base_address);
 
@@ -522,9 +525,9 @@ void mlir_aie_print_shimdma_status(uint16_t col) {
 /// Print the status of a core represented by the given tile, at the given
 /// coordinates.
 void mlir_aie_print_tile_status(int col, int row) {
-  u32 trace_status;
-  u32 status, coreTimerLow, PC, LR, SP, locks, R0, R4;
-  u64 tileAddr = getTileAddr(col, row);
+  uint32_t trace_status;
+  uint32_t status, coreTimerLow, PC, LR, SP, locks, R0, R4;
+  uint64_t tileAddr = getTileAddr(col, row);
 
   status = in32(tileAddr + REG_AIE_CORE_STATUS);
   coreTimerLow = in32(tileAddr + 0x0340F8);
@@ -544,11 +547,11 @@ void mlir_aie_print_tile_status(int col, int row) {
   xil_printf("Core [%d, %d] trace status is %08X\n\r", col, row, trace_status);
 
   for (int lock = 0; lock < 16; lock++) {
-    u32 two_bits = (locks >> (lock * 2)) & 0x3;
+    uint32_t two_bits = (locks >> (lock * 2)) & 0x3;
     if (two_bits) {
       xil_printf("Lock %d: ", lock);
-      u32 acquired = two_bits & 0x1;
-      u32 value = two_bits & 0x2;
+      uint32_t acquired = two_bits & 0x1;
+      uint32_t value = two_bits & 0x2;
       if (acquired)
         xil_printf("Acquired ");
       xil_printf(value ? "1" : "0");
@@ -735,7 +738,7 @@ int xaie_shim_dma_push_bd(uint64_t TileAddr, int direction, int channel,
   // change length in bytes to 32 bit words
   out32(TileAddr + REG_SHIM_DMA_BD_BUF_LEN(bd), len >> 2);
 
-  u32 control = (HIGH_ADDR(addr) << 16) | SHIM_DMA_BD_CTRL_VALID;
+  uint32_t control = (HIGH_ADDR(addr) << 16) | SHIM_DMA_BD_CTRL_VALID;
   out32(TileAddr + REG_SHIM_DMA_BD_CTRL(bd), control);
   out32(TileAddr + REG_SHIM_DMA_BD_AXI_CFG(bd),
         0x410); // Burst len [10:9] = 2 (16)
@@ -777,9 +780,9 @@ int xaie_shim_dma_push_bd(uint64_t TileAddr, int direction, int channel,
   return 1;
 }
 
-int xaie_lock_release(u16 col, u16 row, u32 lock_id, u32 val) {
-  u64 Addr = getTileAddr(col, row);
-  u64 LockOfst = 0x0001E020;
+int xaie_lock_release(uint16_t col, uint16_t row, uint32_t lock_id, uint32_t val) {
+  uint64_t Addr = getTileAddr(col, row);
+  uint64_t LockOfst = 0x0001E020;
   if (row != 0)
     LockOfst = 0x0001E020 + 0x10 * (val & 0x1);
   else {
@@ -798,9 +801,9 @@ int xaie_lock_release(u16 col, u16 row, u32 lock_id, u32 val) {
   return 1;
 }
 
-int xaie_lock_acquire_nb(u16 col, u16 row, u32 lock_id, u32 val) {
-  u64 Addr = getTileAddr(col, row);
-  u64 LockOfst = 0x0001E060;
+int xaie_lock_acquire_nb(uint16_t col, uint16_t row, uint32_t lock_id, uint32_t val) {
+  uint64_t Addr = getTileAddr(col, row);
+  uint64_t LockOfst = 0x0001E060;
   if (row != 0)
     LockOfst = 0x0001E060 + 0x10 * (val & 0x1);
   else {
@@ -814,8 +817,8 @@ int xaie_lock_acquire_nb(u16 col, u16 row, u32 lock_id, u32 val) {
       break;
     }
   }
-  u8 lock_ret = 0;
-  u32 loop = 0;
+  uint8_t lock_ret = 0;
+  uint32_t loop = 0;
   while ((!lock_ret) && (loop < 512)) {
     lock_ret = maskpoll32(Addr + LockOfst + 0x80 * lock_id, 0x1, 0x1, 100);
     // lock_ret = XAieTile_LockAcquire(tile, lock_id, val, 10000);
@@ -976,7 +979,7 @@ const uint64_t shmem_base = 0x020100000000ULL;
   Put a tile into reset
 */
 void aie_tile_reset(int col, int row) {
-  u64 tileAddr = getTileAddr(col, row);
+  uint64_t tileAddr = getTileAddr(col, row);
   out32(tileAddr + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_RESET);
 }
 
@@ -984,7 +987,7 @@ void aie_tile_reset(int col, int row) {
   Take a tile out of reset
 */
 void aie_tile_enable(int col, int row) {
-  u64 tileAddr = getTileAddr(col, row);
+  uint64_t tileAddr = getTileAddr(col, row);
   out32(tileAddr + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_ENABLE);
 }
 
@@ -1032,12 +1035,12 @@ void handle_packet_segment_initialize(hsa_agent_dispatch_packet_t *pkt) {
 
   // Address mode here is absolute range
   if (((pkt->arg[0] >> 48) & 0xf) == AIR_ADDRESS_ABSOLUTE_RANGE) {
-    u16 start_row = (pkt->arg[0] >> 16) & 0xff;
-    u16 num_rows = (pkt->arg[0] >> 24) & 0xff;
-    u16 start_col = (pkt->arg[0] >> 32) & 0xff;
-    u16 num_cols = (pkt->arg[0] >> 40) & 0xff;
+    uint16_t start_row = (pkt->arg[0] >> 16) & 0xff;
+    uint16_t num_rows = (pkt->arg[0] >> 24) & 0xff;
+    uint16_t start_col = (pkt->arg[0] >> 32) & 0xff;
+    uint16_t num_cols = (pkt->arg[0] >> 40) & 0xff;
 
-    u16 segment_id = pkt->arg[1] & 0xffff;
+    uint16_t segment_id = pkt->arg[1] & 0xffff;
 
     // TODO more checks on segment dimensions
     if (start_row == 0)
@@ -1051,8 +1054,7 @@ void handle_packet_segment_initialize(hsa_agent_dispatch_packet_t *pkt) {
   }
 }
 
-void handle_packet_get_capabilities(hsa_agent_dispatch_packet_t *pkt,
-                                    uint32_t mb_id) {
+void handle_packet_get_capabilities(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
   // packet is in active phase
   packet_set_active(pkt, true);
   uint64_t *addr = (uint64_t *)(pkt->return_address);
@@ -1144,32 +1146,32 @@ void handle_packet_get_info(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
 
 #ifdef ARM_CONTROLLER
 
-/* Hardcoded . If the platform memory map changes
+/* Hardcoded . If the platform memory map changes 
 these will have to change */
 uint64_t ernic_0_base = 0x0000020100080000UL;
 uint64_t ernic_1_base = 0x00000201000C0000UL;
 
-/* Used for the device controller to poll on an
-incoming RDMA SEND, and copy the payload to some
+/* Used for the device controller to poll on an 
+incoming RDMA SEND, and copy the payload to some 
 buffer in memory */
 void handle_packet_rdma_post_recv(hsa_agent_dispatch_packet_t *pkt) {
 
   // Need to do this before processing the packet
-  packet_set_active(pkt, true);
+  packet_set_active(pkt,true);
 
   // Parsing the packet
   uint64_t local_physical_address = pkt->arg[0];
-  uint8_t qpid = pkt->arg[1] & 0xFF;
-  // uint8_t  tag                  = (pkt->arg[1] >> 8)  & 0xFF; // Currently
-  // don't use tag
-  uint32_t length = (pkt->arg[1] >> 16) & 0xFFFF;
-  uint8_t ernic_sel = (pkt->arg[1] >> 48) & 0xFF;
+  uint8_t  qpid                 = pkt->arg[1] & 0xFF;
+  //uint8_t  tag                  = (pkt->arg[1] >> 8)  & 0xFF; // Currently don't use tag
+  uint32_t length               = (pkt->arg[1] >> 16) & 0xFFFF;
+  uint8_t  ernic_sel            = (pkt->arg[1] >> 48) & 0xFF;
 
-  // Pointing to the proper ERNIC
+  // Pointing to the proper ERNIC 
   volatile uint32_t *ernic_csr = NULL;
-  if (ernic_sel == 0) {
+  if(ernic_sel == 0) {
     ernic_csr = (volatile uint32_t *)ernic_0_base;
-  } else {
+  }
+  else {
     ernic_csr = (volatile uint32_t *)ernic_1_base;
   }
 
@@ -1182,26 +1184,23 @@ void handle_packet_rdma_post_recv(hsa_agent_dispatch_packet_t *pkt) {
   air_printf("\ternic_sel: 0x%x\r\n", ernic_sel);
 
   // Determine base address of the RQ to read the RQE
-  uint32_t rq_base_address_low = ernic_csr[ERNIC_QP_ADDR(qpid, RQBAi)];
-  uint32_t rq_base_address_high = ernic_csr[ERNIC_QP_ADDR(qpid, RQBAMSBi)];
-  uint64_t rq_base_address = (((uint64_t)rq_base_address_high) << 32) |
-                             ((uint64_t)rq_base_address_low);
+  uint32_t rq_base_address_low    = ernic_csr[ERNIC_QP_ADDR(qpid, RQBAi)];
+  uint32_t rq_base_address_high   = ernic_csr[ERNIC_QP_ADDR(qpid, RQBAMSBi)];
+  uint64_t rq_base_address        = (((uint64_t)rq_base_address_high) << 32) | ((uint64_t)rq_base_address_low);
   air_printf("\trq_base_address: 0x%lx\r\n", rq_base_address);
 
   // Wait for RQPIDB to be greater than RQCIDB
   uint32_t rq_ci_db = ernic_csr[ERNIC_QP_ADDR(qpid, RQCIi)];
   uint32_t rq_pi_db = ernic_csr[ERNIC_QP_ADDR(qpid, STATRQPIDBi)];
-  air_printf("Polling onon rq_pi_db to be greater than 0x%x. Read: 0x%x\r\n",
-             rq_ci_db, rq_pi_db);
-  while (rq_pi_db <= rq_ci_db) {
-    rq_pi_db = ernic_csr[ERNIC_QP_ADDR(qpid, STATRQPIDBi)];
+  air_printf("Polling onon rq_pi_db to be greater than 0x%x. Read: 0x%x\r\n", rq_ci_db, rq_pi_db);
+  while(rq_pi_db <= rq_ci_db) {
+      rq_pi_db = ernic_csr[ERNIC_QP_ADDR(qpid, STATRQPIDBi)];
   }
   air_printf("Observed aSEND. Copying to local buffer\r\n");
 
   // Copy what RQ PIDB is pointing at to local_physical_address
   void *rqe = (void *)(rq_base_address + (rq_pi_db - 1) * RQE_SIZE);
-  air_printf("rqe is at %p and copying to 0x%lx\r\n", rqe,
-             local_physical_address);
+  air_printf("rqe is at %p and copying to 0x%lx\r\n", rqe, local_physical_address);
   memcpy((size_t *)local_physical_address, (size_t *)rqe, length);
 
   // Increment RQ CIDB so it knows that it can overwrite it
@@ -1219,17 +1218,18 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
   // Parsing the packet
   uint64_t remote_virtual_address = pkt->arg[0];
   uint64_t local_physical_address = pkt->arg[1];
-  uint32_t length = pkt->arg[2] & 0xFFFF;
-  uint8_t op = (pkt->arg[2] >> 32) & 0xFF;
-  uint8_t key = (pkt->arg[2] >> 40) & 0xFF;
-  uint8_t qpid = (pkt->arg[2] >> 48) & 0xFF;
-  uint8_t ernic_sel = (pkt->arg[2] >> 56) & 0xFF;
+  uint32_t length                 = pkt->arg[2] & 0xFFFF;
+  uint8_t  op                     = (pkt->arg[2] >> 32) & 0xFF;
+  uint8_t  key                    = (pkt->arg[2] >> 40) & 0xFF;
+  uint8_t  qpid                   = (pkt->arg[2] >> 48) & 0xFF;
+  uint8_t  ernic_sel              = (pkt->arg[2] >> 56) & 0xFF;
 
-  // Pointing to the proper ERNIC
+  // Pointing to the proper ERNIC 
   volatile uint32_t *ernic_csr = NULL;
-  if (ernic_sel == 0) {
+  if(ernic_sel == 0) {
     ernic_csr = (volatile uint32_t *)ernic_0_base;
-  } else {
+  }
+  else {
     ernic_csr = (volatile uint32_t *)ernic_1_base;
   }
 
@@ -1244,10 +1244,9 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
   air_printf("\tqpid: 0x%x\r\n", qpid);
   air_printf("\ternic_sel: 0x%x\r\n", ernic_sel);
 
-  uint32_t sq_base_address_low = ernic_csr[ERNIC_QP_ADDR(qpid, SQBAi)];
-  uint32_t sq_base_address_high = ernic_csr[ERNIC_QP_ADDR(qpid, SQBAMSBi)];
-  uint64_t sq_base_address = (((uint64_t)sq_base_address_high) << 32) |
-                             ((uint64_t)sq_base_address_low);
+  uint32_t sq_base_address_low    = ernic_csr[ERNIC_QP_ADDR(qpid, SQBAi)];
+  uint32_t sq_base_address_high   = ernic_csr[ERNIC_QP_ADDR(qpid, SQBAMSBi)];
+  uint64_t sq_base_address        = (((uint64_t)sq_base_address_high) << 32) | ((uint64_t)sq_base_address_low);
   air_printf("\tsq_base_address: 0x%lx\r\n", sq_base_address);
 
   // Read the doorbell to determine where to put the WQE
@@ -1255,25 +1254,24 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
   air_printf("\tsq_pi_db: 0x%x\r\n", sq_pi_db);
 
   // Write the WQE to the SQ
-  struct pcie_ernic_wqe *wqe =
-      &(((struct pcie_ernic_wqe *)(sq_base_address))[sq_pi_db]);
+  struct pcie_ernic_wqe *wqe = &(((struct pcie_ernic_wqe *)(sq_base_address))[sq_pi_db]);
   air_printf("Starting writing WQE to %p\r\n", wqe);
-  wqe->wrid = 0xe0a6 & 0x0000FFFF; // Just hardcoding the ID for now
-  wqe->laddr_lo = (uint32_t)(local_physical_address & 0x00000000FFFFFFFF);
-  wqe->laddr_hi = (uint32_t)(local_physical_address >> 32);
-  wqe->length = length;
-  wqe->op = op & 0x000000FF;
-  wqe->offset_lo = (uint32_t)(remote_virtual_address & 0x00000000FFFFFFFF);
-  wqe->offset_hi = (uint32_t)(remote_virtual_address >> 32);
-  wqe->rtag = key;
+  wqe->wrid           = 0xe0a6 & 0x0000FFFF; // Just hardcoding the ID for now
+  wqe->laddr_lo       = (uint32_t)(local_physical_address & 0x00000000FFFFFFFF);
+  wqe->laddr_hi       = (uint32_t)(local_physical_address >> 32);
+  wqe->length         = length;
+  wqe->op             = op & 0x000000FF;
+  wqe->offset_lo      = (uint32_t)(remote_virtual_address & 0x00000000FFFFFFFF);
+  wqe->offset_hi      = (uint32_t)(remote_virtual_address >> 32);
+  wqe->rtag           = key;
   wqe->send_data_dw_0 = 0;
   wqe->send_data_dw_1 = 0;
   wqe->send_data_dw_2 = 0;
   wqe->send_data_dw_3 = 0;
-  wqe->immdt_data = 0;
-  wqe->reserved_1 = 0;
-  wqe->reserved_2 = 0;
-  wqe->reserved_3 = 0;
+  wqe->immdt_data     = 0;
+  wqe->reserved_1     = 0;
+  wqe->reserved_2     = 0;
+  wqe->reserved_3     = 0;
   air_printf("Done writing WQE\r\n");
 
   // Ring the doorbell
@@ -1281,16 +1279,14 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
 
   // Poll on the completion
   uint32_t cq_ci_db = ernic_csr[ERNIC_QP_ADDR(qpid, CQHEADi)];
-  while (cq_ci_db != (sq_pi_db + 1)) {
-    air_printf("Polling on on CQHEADi to be 0x%x. Read: 0x%x\r\n", sq_pi_db + 1,
-               cq_ci_db);
-    cq_ci_db = ernic_csr[ERNIC_QP_ADDR(qpid, CQHEADi)];
+  while(cq_ci_db != (sq_pi_db + 1) ) {
+      air_printf("Polling on on CQHEADi to be 0x%x. Read: 0x%x\r\n", sq_pi_db + 1, cq_ci_db);
+      cq_ci_db = ernic_csr[ERNIC_QP_ADDR(qpid, CQHEADi)];
   }
 }
 #endif
 
-void handle_packet_read_write_aie_reg32(hsa_agent_dispatch_packet_t *pkt,
-                                        bool is_write) {
+void handle_packet_read_write_aie_reg32(hsa_agent_dispatch_packet_t *pkt, bool is_write) {
 
   packet_set_active(pkt, true);
   uint64_t address = pkt->arg[0];
@@ -1398,7 +1394,7 @@ void handle_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt) {
     // reset the column
     aie_reset_column(c);
   }
-
+  
   // copy
   uint32_t ret = cdma_sg_start_sync(0, idx);
   if (ret) {
@@ -1433,10 +1429,10 @@ void handle_packet_sg_cdma(hsa_agent_dispatch_packet_t *pkt) {
   // packet is in active phase
   packet_set_active(pkt, true);
   volatile uint32_t *cdmab = (volatile uint32_t *)(CDMA_BASE);
-  u32 start_row = (pkt->arg[3] >> 0) & 0xff;
-  u32 num_rows = (pkt->arg[3] >> 8) & 0xff;
-  u32 start_col = (pkt->arg[3] >> 16) & 0xff;
-  u32 num_cols = (pkt->arg[3] >> 24) & 0xff;
+  uint32_t start_row = (pkt->arg[3] >> 0) & 0xff;
+  uint32_t num_rows = (pkt->arg[3] >> 8) & 0xff;
+  uint32_t start_col = (pkt->arg[3] >> 16) & 0xff;
+  uint32_t num_cols = (pkt->arg[3] >> 24) & 0xff;
   for (uint c = start_col; c < start_col + num_cols; c++) {
     for (uint r = start_row; r < start_row + num_rows; r++) {
       out32(getTileAddr(c, r) + 0x00032000, 0x2);
@@ -1485,11 +1481,11 @@ void handle_packet_sg_cdma(hsa_agent_dispatch_packet_t *pkt) {
 void handle_packet_cdma(hsa_agent_dispatch_packet_t *pkt) {
   // packet is in active phase
   packet_set_active(pkt, true);
-  u32 start_row = (pkt->arg[3] >> 0) & 0xff;
-  u32 num_rows = (pkt->arg[3] >> 8) & 0xff;
-  u32 start_col = (pkt->arg[3] >> 16) & 0xff;
-  u32 num_cols = (pkt->arg[3] >> 24) & 0xff;
-  u32 op = (pkt->arg[3] >> 32) & 0xff;
+  uint32_t start_row = (pkt->arg[3] >> 0) & 0xff;
+  uint32_t num_rows = (pkt->arg[3] >> 8) & 0xff;
+  uint32_t start_col = (pkt->arg[3] >> 16) & 0xff;
+  uint32_t num_cols = (pkt->arg[3] >> 24) & 0xff;
+  uint32_t op = (pkt->arg[3] >> 32) & 0xff;
   if (op == 2) {
     for (uint c = start_col; c < start_col + num_cols; c++) {
       for (uint r = start_row; r < start_row + num_rows; r++) {
@@ -1540,21 +1536,21 @@ void handle_packet_xaie_lock(hsa_agent_dispatch_packet_t *pkt) {
   // packet is in active phase
   packet_set_active(pkt, true);
 
-  u32 num_cols =
+  uint32_t num_cols =
       (((pkt->arg[0] >> 48) & 0xf) == AIR_ADDRESS_HERD_RELATIVE_RANGE)
           ? ((pkt->arg[0] >> 40) & 0xff)
           : 1;
-  u32 num_rows =
+  uint32_t num_rows =
       (((pkt->arg[0] >> 48) & 0xf) == AIR_ADDRESS_HERD_RELATIVE_RANGE)
           ? ((pkt->arg[0] >> 24) & 0xff)
           : 1;
-  u32 start_col = (pkt->arg[0] >> 32) & 0xff;
-  u32 start_row = (pkt->arg[0] >> 16) & 0xff;
-  u32 lock_id = pkt->arg[1];
-  u32 acqrel = pkt->arg[2];
-  u32 val = pkt->arg[3];
-  for (u32 col = 0; col < num_cols; col++) {
-    for (u32 row = 0; row < num_rows; row++) {
+  uint32_t start_col = (pkt->arg[0] >> 32) & 0xff;
+  uint32_t start_row = (pkt->arg[0] >> 16) & 0xff;
+  uint32_t lock_id = pkt->arg[1];
+  uint32_t acqrel = pkt->arg[2];
+  uint32_t val = pkt->arg[3];
+  for (uint32_t col = 0; col < num_cols; col++) {
+    for (uint32_t row = 0; row < num_rows; row++) {
       if (acqrel == 0)
         xaie_lock_acquire_nb(HerdCfgInst.col_start + start_col + col,
                              HerdCfgInst.row_start + start_row + row, lock_id,
@@ -1568,7 +1564,7 @@ void handle_packet_xaie_lock(hsa_agent_dispatch_packet_t *pkt) {
 }
 
 #ifdef ARM_CONTROLLER
-void handle_packet_xaie_status(hsa_agent_dispatch_packet_t *pkt, u32 type) {
+void handle_packet_xaie_status(hsa_agent_dispatch_packet_t *pkt, uint32_t type) {
   xil_printf("Reading status! %d %d %d\n\r", type, pkt->arg[0], pkt->arg[1]);
   if (type == 1) {
     mlir_aie_print_shimdma_status(pkt->arg[0]);
@@ -1746,13 +1742,11 @@ int stage_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint32_t slot,
   }
 }
 
-void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id,
-                                  int queue_id) {
+void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   uint64_t local_read_index = amd_queue->read_dispatch_id;
   hsa_agent_dispatch_packet_t *pkt_buf(
-      reinterpret_cast<hsa_agent_dispatch_packet_t *>(
-          hsa_csr->queue_bufs[queue_id]));
+      reinterpret_cast<hsa_agent_dispatch_packet_t*>(hsa_csr->queue_bufs[queue_id]));
   hsa_agent_dispatch_packet_t *pkt(
       &pkt_buf[local_read_index % amd_queue->hsa_queue.size]);
 
@@ -1939,14 +1933,12 @@ void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id,
   *rd_id += packets_processed;
 }
 
-void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id,
-                               int queue_id) {
+void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
 
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   uint64_t local_read_index = amd_queue->read_dispatch_id;
   hsa_barrier_and_packet_t *pkt_buf(
-      reinterpret_cast<hsa_barrier_and_packet_t *>(
-          hsa_csr->queue_bufs[queue_id]));
+      reinterpret_cast<hsa_barrier_and_packet_t*>(hsa_csr->queue_bufs[queue_id]));
   hsa_barrier_and_packet_t *pkt(
       &pkt_buf[local_read_index % amd_queue->hsa_queue.size]);
 
@@ -1963,16 +1955,11 @@ void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id,
   //  *)(pkt->dep_signal[i]));
   // unlock_uart(mb_id);
 
-  while (hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                                   HSA_WAIT_STATE_ACTIVE) != 0 ||
-         hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                                   HSA_WAIT_STATE_ACTIVE) != 0 ||
-         hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                                   HSA_WAIT_STATE_ACTIVE) != 0 ||
-         hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                                   HSA_WAIT_STATE_ACTIVE) != 0 ||
-         hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                                   HSA_WAIT_STATE_ACTIVE) != 0) {
+  while ( hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
+          hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
+          hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
+          hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
+          hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0) {
     lock_uart(mb_id);
     air_printf("MB %d : barrier AND packet completion signal timeout!\n\r",
                mb_id);
@@ -1984,15 +1971,15 @@ void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id,
 
   complete_barrier_packet(pkt);
   *rd_id += 1;
+
 }
 
-void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t mb_id,
-                              int queue_id) {
+void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
 
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   uint64_t local_read_index = amd_queue->read_dispatch_id;
-  hsa_barrier_or_packet_t *pkt_buf(reinterpret_cast<hsa_barrier_or_packet_t *>(
-      hsa_csr->queue_bufs[queue_id]));
+  hsa_barrier_or_packet_t *pkt_buf(
+      reinterpret_cast<hsa_barrier_or_packet_t*>(hsa_csr->queue_bufs[queue_id]));
   hsa_barrier_or_packet_t *pkt(
       &pkt_buf[local_read_index % amd_queue->hsa_queue.size]);
 
@@ -2009,17 +1996,12 @@ void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t mb_id,
   //  *)(pkt->dep_signal[i]));
   // unlock_uart(mb_id);
 
-  while (hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                                   HSA_WAIT_STATE_ACTIVE) != 0 &&
-         hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                                   HSA_WAIT_STATE_ACTIVE) != 0 &&
-         hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                                   HSA_WAIT_STATE_ACTIVE) != 0 &&
-         hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                                   HSA_WAIT_STATE_ACTIVE) != 0 &&
-         hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                                   HSA_WAIT_STATE_ACTIVE) != 0) {
-
+  while ( hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
+          hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
+          hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
+          hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
+          hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0) {
+ 
     lock_uart(mb_id);
     air_printf("MB %d : barrier OR packet completion signal timeout!\n\r",
                mb_id);
@@ -2091,24 +2073,24 @@ int main() {
   int admin_queue_id(0);
   amd_queue_t *admin_queue(hsa_csr->amd_aql_queues[admin_queue_id]);
   admin_queue->hsa_queue.size = 64;
-  volatile uint64_t *admin_doorbell(
-      reinterpret_cast<uint64_t *>(hsa_csr->doorbells[admin_queue_id]));
+  volatile uint64_t *admin_doorbell(reinterpret_cast<uint64_t*>(
+      hsa_csr->doorbells[admin_queue_id]));
   volatile uint64_t *admin_rd_id(&admin_queue->read_dispatch_id);
   volatile uint64_t *admin_wr_id(&admin_queue->write_dispatch_id);
   hsa_agent_dispatch_packet_t *admin_queue_buf(
-      reinterpret_cast<hsa_agent_dispatch_packet_t *>(
+      reinterpret_cast<hsa_agent_dispatch_packet_t*>(
           hsa_csr->queue_bufs[admin_queue_id]));
   hsa_agent_dispatch_packet_t *admin_pkt(nullptr);
   uint64_t admin_last_doorbell(std::numeric_limits<uint64_t>::max());
 
   int hqd_id(1);
   amd_queue_t *amd_queue(hsa_csr->amd_aql_queues[hqd_id]);
-  volatile uint64_t *doorbell(
-      reinterpret_cast<uint64_t *>(hsa_csr->doorbells[hqd_id]));
+  volatile uint64_t *doorbell(reinterpret_cast<uint64_t*>(
+      hsa_csr->doorbells[hqd_id]));
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   volatile uint64_t *wr_id(&amd_queue->write_dispatch_id);
   hsa_agent_dispatch_packet_t *queue_buf(
-      reinterpret_cast<hsa_agent_dispatch_packet_t *>(
+      reinterpret_cast<hsa_agent_dispatch_packet_t*>(
           hsa_csr->queue_bufs[hqd_id]));
   hsa_agent_dispatch_packet_t *aql_pkt(nullptr);
   uint64_t last_doorbell(std::numeric_limits<uint64_t>::max());
@@ -2129,13 +2111,13 @@ int main() {
       uint32_t type(static_cast<uint32_t>(admin_pkt->header) & 0xffU);
 
       switch (type) {
-      case HSA_PACKET_TYPE_AGENT_DISPATCH:
-        handle_agent_dispatch_packet(admin_queue, mb_id, admin_queue_id);
-        break;
-      default:
-        air_printf("Unsupported admin queue packet type: %u\n\r", type);
-        ++(*admin_rd_id);
-        break;
+        case HSA_PACKET_TYPE_AGENT_DISPATCH:
+          handle_agent_dispatch_packet(admin_queue, mb_id, admin_queue_id);
+          break;
+        default:
+          air_printf("Unsupported admin queue packet type: %u\n\r", type);
+          ++(*admin_rd_id);
+          break;
       }
     }
 
@@ -2148,51 +2130,48 @@ int main() {
       air_printf("Doorbell rung %llu\n\r", *doorbell);
       air_printf("Packet type %u, func type %u, pkt data %llx\n\r", type, func,
                  aql_pkt->arg[0]);
-      air_printf("queue heap addr %llx\n\r",
-                 hsa_csr->queue_dram_cpu_va[hqd_id]);
+      air_printf("queue heap addr %llx\n\r", hsa_csr->queue_dram_cpu_va[hqd_id]);
 
       uint32_t invalid_count = 0;
       while (type == HSA_PACKET_TYPE_INVALID) {
-        aql_pkt = &queue_buf[*rd_id % amd_queue->hsa_queue.size];
-        type = aql_pkt->header & 0xff;
-        type = static_cast<uint32_t>(aql_pkt->header) & 0xffU;
-        func = static_cast<uint32_t>(aql_pkt->type) & 0xffffU;
+          aql_pkt = &queue_buf[*rd_id % amd_queue->hsa_queue.size];
+          type = aql_pkt->header & 0xff;
+          type = static_cast<uint32_t>(aql_pkt->header) & 0xffU;
+          func = static_cast<uint32_t>(aql_pkt->type) & 0xffffU;
 
-        // TODO: Come back to this for the multi-prodcer queue as we can hit
-        // this
-        invalid_count++;
-        if (invalid_count > INVLD_COUNT_TIMEOUT) {
-          xil_printf("[WARNING] We are stuck in an invalid packet and timed "
-                     "out. Breaking\r\n");
-          xil_printf("\theader: 0x%x\r\n", aql_pkt->header);
-          xil_printf("\ttype: 0x%x\r\n", type);
-          xil_printf("\tfunc: 0x%x\r\n", func);
-          xil_printf("\trd_id: 0x%x\r\n", *rd_id);
-          xil_printf("\tdoorbell: 0x%x\r\n", *doorbell);
-          break;
-        }
+          // TODO: Come back to this for the multi-prodcer queue as we can hit this
+          invalid_count++;
+          if(invalid_count > INVLD_COUNT_TIMEOUT) {
+            xil_printf("[WARNING] We are stuck in an invalid packet and timed out. Breaking\r\n");
+            xil_printf("\theader: 0x%x\r\n", aql_pkt->header);
+            xil_printf("\ttype: 0x%x\r\n", type);
+            xil_printf("\tfunc: 0x%x\r\n", func);
+            xil_printf("\trd_id: 0x%x\r\n", *rd_id);
+            xil_printf("\tdoorbell: 0x%x\r\n", *doorbell);
+            break;
+          }
       }
 
       switch (type) {
-      case HSA_PACKET_TYPE_AGENT_DISPATCH:
-        air_printf("Dispatching agent dispatch packet\n\r");
-        handle_agent_dispatch_packet(amd_queue, mb_id, hqd_id);
-        break;
-      case HSA_PACKET_TYPE_BARRIER_AND:
-        air_printf("Executing barrier and packet\r\n");
-        handle_barrier_and_packet(amd_queue, mb_id, hqd_id);
-        break;
-      case HSA_PACKET_TYPE_BARRIER_OR:
-        air_printf("Executing barrier or packet\r\n");
-        handle_barrier_or_packet(amd_queue, mb_id, hqd_id);
-        break;
-      // We are already handling the invalid packet above
-      case HSA_PACKET_TYPE_INVALID:
-        break;
-      default:
-        air_printf("Unsupported packet type\n\r");
-        ++(*rd_id);
-        break;
+        case HSA_PACKET_TYPE_AGENT_DISPATCH:
+          air_printf("Dispatching agent dispatch packet\n\r");
+          handle_agent_dispatch_packet(amd_queue, mb_id, hqd_id);
+          break;
+        case HSA_PACKET_TYPE_BARRIER_AND:
+          air_printf("Executing barrier and packet\r\n");
+          handle_barrier_and_packet(amd_queue, mb_id, hqd_id);
+          break;
+        case HSA_PACKET_TYPE_BARRIER_OR:
+          air_printf("Executing barrier or packet\r\n");
+          handle_barrier_or_packet(amd_queue, mb_id, hqd_id);
+          break;
+        // We are already handling the invalid packet above
+        case HSA_PACKET_TYPE_INVALID:
+          break;
+        default:
+          air_printf("Unsupported packet type\n\r");
+          ++(*rd_id);
+          break;
       }
     }
     shell();

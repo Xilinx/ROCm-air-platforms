@@ -1,3 +1,6 @@
+// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
+
 #ifndef VCK5000_H_
 #define VCK5000_H_
 

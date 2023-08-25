@@ -92,8 +92,8 @@ typedef struct __ALIGNED__(align_bytes) amd_signal_s {
   amd_signal_kind64_t kind;
   union {
     volatile int64_t value;
-    volatile uint32_t *legacy_hardware_doorbell_ptr;
-    volatile uint64_t *hardware_doorbell_ptr;
+    volatile uint32_t* legacy_hardware_doorbell_ptr;
+    volatile uint64_t* hardware_doorbell_ptr;
   };
   uint64_t event_mailbox_ptr;
   uint32_t event_id;
@@ -107,4 +107,4 @@ typedef struct __ALIGNED__(align_bytes) amd_signal_s {
   uint32_t reserved3[2];
 } amd_signal_t;
 
-#endif // AMD_HSA_H_
+#endif  // AMD_HSA_H_

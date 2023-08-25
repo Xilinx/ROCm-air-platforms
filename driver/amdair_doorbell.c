@@ -1,6 +1,8 @@
-#include "amdair_doorbell.h"
+// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
 
 #include "amdair_device.h"
+#include "amdair_doorbell.h"
 
 uint32_t amdair_doorbell_find_free(struct amdair_device *air_dev)
 {

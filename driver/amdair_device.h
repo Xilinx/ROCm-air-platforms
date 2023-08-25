@@ -1,5 +1,5 @@
 // Copyright (C) 2023, Advanced Micro Devices, Inc.
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: MIT
 
 #ifndef AMDAIR_DEVICE_H_
 #define AMDAIR_DEVICE_H_
@@ -46,11 +46,12 @@ struct amdair_device_asic_funcs {
 	void (*init_queues)(struct amdair_device *air_dev);
 	void (*init_doorbells)(struct amdair_device *air_dev);
 	void (*set_device_heap)(struct amdair_device *air_dev,
-				int queue_reg_off, uint64_t vaddr);
+				int queue_reg_off,
+				uint64_t vaddr);
 	void (*send_admin_queue_cmd_and_wait)(struct amdair_device *air_dev,
 					      uint16_t cmd_type, uint64_t *arg,
 					      int num_args);
-	uint64_t (*get_aie_mem_range)(void);
+  uint64_t (*get_aie_mem_range)(void);
 };
 
 /**
