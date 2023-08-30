@@ -22,16 +22,7 @@
 #define ARM_CONTROLLER
 #endif
 
-#if defined(__riscv)
-#define RISCV_CONTROLLER
-#endif
-
 extern "C" {
-#ifndef RISCV_CONTROLLER
-#include "bp/lib/include/xmutex.h"
-#else
-#include "xmutex.h"
-#endif
 
 // Right now, only ARM can control ERNICs
 #ifdef ARM_CONTROLLER
@@ -41,23 +32,13 @@ extern "C" {
 #if defined(ARM_CONTROLLER)
 #include "xaiengine.h"
 #include "xil_cache.h"
-#elif defined(RISCV_CONTROLLER)
 #else
 #include "pvr.h"
 #endif
 
 }
 
-#ifndef RISCV_CONTROLLER
 #include "platform.h"
-#else
-#include "bp_utils.h"
-#include "bp_pl.h"
-#endif
-
-#ifdef ARM_CONTROLLER
-#include "arm_bp_intf.h"
-#endif
 
 #include "shell.h"
 
@@ -87,21 +68,19 @@ extern "C" {
 #define NUM_SHIM_DMAS 16
 #define NUM_COL_DMAS 4
 
+#define INVLD_COUNT_TIMEOUT 100
+
 int shim_dma_cols[NUM_SHIM_DMAS] = {2,  3,  6,  7,  10, 11, 18, 19,
                                     26, 27, 34, 35, 42, 43, 46, 47};
 int col_dma_cols[NUM_COL_DMAS] = {7, 8, 9, 10};
 #define NUM_DMAS (NUM_SHIM_DMAS + NUM_COL_DMAS)
 
 inline uint64_t mymod(uint64_t a) {
-#ifdef RISCV_CONTROLLER
-  return (a % AQL_QUEUE_NUM_ENTRIES);
-#else
   uint64_t result = a;
   while (result >= AQL_QUEUE_NUM_ENTRIES) {
     result -= AQL_QUEUE_NUM_ENTRIES;
   }
   return result;
-#endif
 }
 
 namespace {
@@ -989,18 +968,6 @@ void xaie_segment_init(int start_col, int num_cols, int start_row,
 } // namespace
 
 const uint64_t shmem_base = 0x020100000000ULL;
-const uint64_t num_mb_offset = 0x208;
-const uint64_t global_barrier_offset = 0x210;
-
-XMutex xmutex;
-XMutex* xmutex_ptr = &xmutex;
-XMutex_Config* xmutex_cfg;
-
-// Have to define some parameters for the arm here
-#ifndef RISCV_CONTROLLER
-#define XPAR_MUTEX_0_UART_LOCK    0U
-#define XPAR_MUTEX_0_NUM_MB_LOCK  1U
-#endif
 
 bool setup;
 
@@ -1087,9 +1054,7 @@ void handle_packet_get_capabilities(hsa_agent_dispatch_packet_t *pkt, uint32_t m
 #if defined(ARM_CONTROLLER)
   int user1 = 1;
   int user2 = 0;
-#elif defined(RISCV_CONTROLLER)
-  int user1 = *((volatile uint32_t*)(shmem_base+num_mb_offset));
-  int user2 = 0;
+
 #else
   pvr_t pvr;
   microblaze_get_pvr(&pvr);
@@ -1115,9 +1080,6 @@ void handle_packet_get_info(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
 
 #if defined(ARM_CONTROLLER)
   int user1 = 1;
-  int user2 = 0;
-#elif defined(RISCV_CONTROLLER)
-  int user1 = *((volatile uint32_t*)(shmem_base+num_mb_offset));
   int user2 = 0;
 #else
   pvr_t pvr;
@@ -1682,10 +1644,11 @@ int stage_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint32_t slot,
 
 void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
+  uint64_t local_read_index = amd_queue->read_dispatch_id;
   hsa_agent_dispatch_packet_t *pkt_buf(
       reinterpret_cast<hsa_agent_dispatch_packet_t*>(hsa_csr->queue_bufs[queue_id]));
   hsa_agent_dispatch_packet_t *pkt(
-      &pkt_buf[*rd_id % amd_queue->hsa_queue.size]);
+      &pkt_buf[local_read_index % amd_queue->hsa_queue.size]);
 
   int last_slot = 0;
   int max_slot = 4 * NUM_DMAS - 1;
@@ -1731,12 +1694,12 @@ void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int qu
       } while (!staged_nd_slot[slot].valid || stalled || !active);
 
       if (slot == last_slot) { // Begin get next packet
-        ++(*rd_id);
-        pkt = &pkt_buf[*rd_id % amd_queue->hsa_queue.size];
+        local_read_index++;
+        pkt = &pkt_buf[local_read_index % amd_queue->hsa_queue.size];
         air_printf("HELLO NEW PACKET IN FLIGHT!\n\r");
         if (((pkt->header) & 0xff) != HSA_PACKET_TYPE_AGENT_DISPATCH) {
-          --(*rd_id);
-          pkt = &pkt_buf[*rd_id % amd_queue->hsa_queue.size];
+          local_read_index--;
+          pkt = &pkt_buf[local_read_index % amd_queue->hsa_queue.size];
           air_printf("WARN: Found invalid HSA packet inside peek loop!\n\r");
           // TRICKY weird state where we didn't find a new packet but RR won't
           // let us retry. So advance last_slot.
@@ -1830,13 +1793,6 @@ void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int qu
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
-#ifdef ARM_CONTROLLER
-    case AIR_PKT_TYPE_PROG_FIRMWARE:
-      handle_packet_prog_firmware(pkt);
-      complete_agent_dispatch_packet(pkt);
-      packets_processed++;
-      break;
-#endif
 
     case AIR_PKT_TYPE_ND_MEMCPY: // Only arrive here the first try.
       uint16_t memory_space = (pkt->arg[0] >> 16) & 0x00ff;
@@ -1872,26 +1828,14 @@ void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int qu
   *rd_id += packets_processed;
 }
 
-inline hsa_signal_value_t signal_wait(hsa_signal_t signal,
-                                      hsa_signal_value_t compare_value,
-                                      uint64_t timeout_hint,
-                                      hsa_signal_value_t default_value) {
-  if (signal.handle == 0)
-    return default_value;
-  hsa_signal_value_t ret = 0;
-  uint64_t timeout = timeout_hint;
-  do {
-    ret = signal.handle;
-    if (ret == compare_value)
-      return compare_value;
-  } while (timeout--);
-  return ret;
-}
+void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
 
-void handle_barrier_and_packet(amd_queue_t *q, uint32_t mb_id) {
-  uint64_t rd_idx = q->read_dispatch_id;
-  hsa_barrier_and_packet_t *pkt =
-      &((hsa_barrier_and_packet_t *)q->hsa_queue.base_address)[mymod(rd_idx)];
+  volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
+  uint64_t local_read_index = amd_queue->read_dispatch_id;
+  hsa_barrier_and_packet_t *pkt_buf(
+      reinterpret_cast<hsa_barrier_and_packet_t*>(hsa_csr->queue_bufs[queue_id]));
+  hsa_barrier_and_packet_t *pkt(
+      &pkt_buf[local_read_index % amd_queue->hsa_queue.size]);
 
   // TODO complete functionality with VAs
   hsa_signal_t s0 = pkt->dep_signal[0];
@@ -1906,11 +1850,11 @@ void handle_barrier_and_packet(amd_queue_t *q, uint32_t mb_id) {
   //  *)(pkt->dep_signal[i]));
   // unlock_uart(mb_id);
 
-  while ((signal_wait(s0, 0, 0x80000, 0) != 0) ||
-         (signal_wait(s1, 0, 0x80000, 0) != 0) ||
-         (signal_wait(s2, 0, 0x80000, 0) != 0) ||
-         (signal_wait(s3, 0, 0x80000, 0) != 0) ||
-         (signal_wait(s4, 0, 0x80000, 0) != 0)) {
+  while ( hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
+          hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
+          hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
+          hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
+          hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0) {
     lock_uart(mb_id);
     air_printf("MB %d : barrier AND packet completion signal timeout!\n\r",
                mb_id);
@@ -1921,14 +1865,18 @@ void handle_barrier_and_packet(amd_queue_t *q, uint32_t mb_id) {
   }
 
   complete_barrier_packet(pkt);
-  q->read_dispatch_id += 1;
-  q->read_dispatch_id = mymod(q->read_dispatch_id);
+  *rd_id += 1;
+
 }
 
-void handle_barrier_or_packet(amd_queue_t *q, uint32_t mb_id) {
-  uint64_t rd_idx = q->read_dispatch_id;
-  hsa_barrier_or_packet_t *pkt =
-      &((hsa_barrier_or_packet_t *)q->hsa_queue.base_address)[mymod(rd_idx)];
+void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
+
+  volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
+  uint64_t local_read_index = amd_queue->read_dispatch_id;
+  hsa_barrier_or_packet_t *pkt_buf(
+      reinterpret_cast<hsa_barrier_or_packet_t*>(hsa_csr->queue_bufs[queue_id]));
+  hsa_barrier_or_packet_t *pkt(
+      &pkt_buf[local_read_index % amd_queue->hsa_queue.size]);
 
   // TODO complete functionality with VAs
   hsa_signal_t s0 = pkt->dep_signal[0];
@@ -1943,11 +1891,12 @@ void handle_barrier_or_packet(amd_queue_t *q, uint32_t mb_id) {
   //  *)(pkt->dep_signal[i]));
   // unlock_uart(mb_id);
 
-  while ((signal_wait(s0, 0, 0x80000, 1) != 0) &&
-         (signal_wait(s1, 0, 0x80000, 1) != 0) &&
-         (signal_wait(s2, 0, 0x80000, 1) != 0) &&
-         (signal_wait(s3, 0, 0x80000, 1) != 0) &&
-         (signal_wait(s4, 0, 0x80000, 1) != 0)) {
+  while ( hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
+          hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
+          hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
+          hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
+          hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0) {
+ 
     lock_uart(mb_id);
     air_printf("MB %d : barrier OR packet completion signal timeout!\n\r",
                mb_id);
@@ -1958,14 +1907,13 @@ void handle_barrier_or_packet(amd_queue_t *q, uint32_t mb_id) {
   }
 
   complete_barrier_packet(pkt);
-  q->read_dispatch_id += 1;
-  q->read_dispatch_id = mymod(q->read_dispatch_id);
+  *rd_id += 1;
 }
 
 int main() {
-#ifndef RISCV_CONTROLLER
+
+  // Initializing our platform
   init_platform();
-#endif
 
   hsa_csr_init();
   hsa_csr_print();
@@ -1981,26 +1929,13 @@ int main() {
     xil_printf("ERROR initializing device.\n\r");
 
   // Setting the number of agents in the system
-  int user1 = NUM_HERD_CONTROLLERS + 1;
+  int user1 = 1; // number of controllers
   int user2 = 0;
 
   int mb_id = user2 & 0xff;
   int maj = (user2 >> 24) & 0xff;
   int min = (user2 >> 16) & 0xff;
   int ver = (user2 >> 8) & 0xff;
-#elif defined(RISCV_CONTROLLER)
-  // HART ID is local per BP complex (i.e., 0 for a unicore BP)
-  // Global ID is a software configurable ID, which must be set prior to execution start
-  // most designs set a sane default from hardware so software does not need to set this
-  uint64_t user2 = bp_get_hart() + bp_get_global_id();
-  uint32_t mb_id = user2 & 0xff;
-  // MIMPID CSR is used to specify a tuple of {vendor, major, minor, patch} that describes
-  // the implementer and IP version of the processor hardware
-  uint64_t mimpid = bp_get_mimpid();
-  uint32_t vendor = (mimpid >> 48) & 0xffff;
-  uint32_t maj = (mimpid >> 32) & 0xffff;
-  uint32_t min = (mimpid >> 16) & 0xffff;
-  uint32_t ver = (mimpid) & 0xffff;
 #else
   pvr_t pvr;
   microblaze_get_pvr(&pvr);
@@ -2011,55 +1946,9 @@ int main() {
   uint32_t ver = (user2 >> 8) & 0xff;
 #endif
 
-  // initialize private view of the Mutex block
-  xmutex_cfg = XMutex_LookupConfig(XPAR_MUTEX_0_DEVICE_ID);
-  XMutex_CfgInitialize(xmutex_ptr, xmutex_cfg, xmutex_cfg->BaseAddress, mb_id);
-
-  // leader core has an ID of 0 and does the following:
-  // - initializes the mutex IP block and the shared signals
-  // - writes a non-zero value to the global_barrier to release all other cores for execution
-  // necessarily, global_barrier must start with a value of 0
-  if (mb_id == 0) {
-    // unlock all locked mutex
-    uint32_t mutex_owner, mutex_locked;
-    for (uint32_t i = 0; i < xmutex_ptr->Config.NumMutex; i++) {
-      XMutex_GetStatus(xmutex_ptr, i, &mutex_locked, &mutex_owner);
-      if (mutex_locked) {
-        XMutex_Unlock(xmutex_ptr, i, mutex_owner);
-      }
-    }
-
-    // initialize shared signals
-    /*uint64_t *s = (uint64_t *)(shmem_base + MB_SHMEM_SIGNAL_OFFSET);
-    for (uint64_t i = 0; i < (MB_SHMEM_SIGNAL_SIZE) / sizeof(uint64_t); i++) {
-      s[i] = 0;
-    }
-    s = (uint64_t *)(shmem_base + MB_SHMEM_DOORBELL_OFFSET);
-    for (uint64_t i = 0; i < (MB_SHMEM_DOORBELL_SIZE) / sizeof(uint64_t); i++) {
-      s[i] = 0;
-    }*/
-
-    hsa_csr->global_barrier = 1;
-  } else {
-    while (!hsa_csr->global_barrier) {}
-  }
-
-  // all cores update num_mb field in shared BRAM
-  // requires each core's mb_id to be accurate and mutex locks to be initialized properly
-  XMutex_Lock(xmutex_ptr, XPAR_MUTEX_0_NUM_MB_LOCK, mb_id);
-  if (mb_id >= hsa_csr->num_aql_queues) {
-    air_printf("MB ID %d is greater than the number of queues %d.\n\r", mb_id,
-               hsa_csr->num_aql_queues);
-  }
-  XMutex_Unlock(xmutex_ptr, XPAR_MUTEX_0_NUM_MB_LOCK, mb_id);
-
   lock_uart(mb_id);
 #if defined(ARM_CONTROLLER)
   xil_printf("ARM %d of %d firmware %d.%d.%d created on %s at %s GMT\n\r",
-             mb_id + 1, hsa_csr->num_aql_queues, maj, min, ver, __DATE__,
-             __TIME__);
-#elif defined(RISCV_CONTROLLER)
-  xil_printf("BP %d of %d firmware %d.%d.%d created on %s at %s GMT\n\r",
              mb_id + 1, hsa_csr->num_aql_queues, maj, min, ver, __DATE__,
              __TIME__);
 #else
@@ -2073,10 +1962,6 @@ int main() {
   setup = false;
   lock_uart(mb_id);
   unlock_uart(mb_id);
-
-#if defined(ARM_CONTROLLER)
-  start_bps();
-#endif
 
   bool done(false);
 
@@ -2115,7 +2000,7 @@ int main() {
 
   air_printf("Starting packet processing loop\n\r");
   while (!done) {
-    if (*admin_doorbell != admin_last_doorbell) {
+    if (*admin_doorbell + 1 > *admin_rd_id) {
       ++admin_last_doorbell;
       admin_pkt = &admin_queue_buf[*admin_rd_id % 64];
 
@@ -2130,7 +2015,7 @@ int main() {
       }
     }
 
-    if (*doorbell != last_doorbell) {
+    if (*doorbell + 1 > *rd_id) {
       ++last_doorbell;
       aql_pkt = &queue_buf[*rd_id % amd_queue->hsa_queue.size];
       uint32_t type(static_cast<uint32_t>(aql_pkt->header) & 0xffU);
@@ -2141,11 +2026,23 @@ int main() {
                  aql_pkt->arg[0]);
       air_printf("queue heap addr %llx\n\r", hsa_csr->queue_dram_cpu_va[hqd_id]);
 
+      uint32_t invalid_count = 0;
       while (type == HSA_PACKET_TYPE_INVALID) {
           aql_pkt = &queue_buf[*rd_id % amd_queue->hsa_queue.size];
           type = aql_pkt->header & 0xff;
           type = static_cast<uint32_t>(aql_pkt->header) & 0xffU;
           func = static_cast<uint32_t>(aql_pkt->type) & 0xffffU;
+
+          // TODO: Come back to this for the multi-prodcer queue as we can hit this
+          invalid_count++;
+          if(invalid_count > INVLD_COUNT_TIMEOUT) {
+            xil_printf("[WARNING] We are stuck in an invalid packet and timed out. Breaking\r\n");
+            xil_printf("\theader: 0x%x\r\n", aql_pkt->header);
+            xil_printf("\ttype: 0x%x\r\n", type);
+            xil_printf("\tfunc: 0x%x\r\n", func);
+            xil_printf("\trd_id: 0x%x\r\n", *rd_id);
+            break;
+          }
       }
 
       switch (type) {
@@ -2154,10 +2051,15 @@ int main() {
           handle_agent_dispatch_packet(amd_queue, mb_id, hqd_id);
           break;
         case HSA_PACKET_TYPE_BARRIER_AND:
-          handle_barrier_and_packet(amd_queue, mb_id);
+          air_printf("Executing barrier and packet\r\n");
+          handle_barrier_and_packet(amd_queue, mb_id, hqd_id);
           break;
         case HSA_PACKET_TYPE_BARRIER_OR:
-          handle_barrier_or_packet(amd_queue, mb_id);
+          air_printf("Executing barrier or packet\r\n");
+          handle_barrier_or_packet(amd_queue, mb_id, hqd_id);
+          break;
+        // We are already handling the invalid packet above
+        case HSA_PACKET_TYPE_INVALID:
           break;
         default:
           air_printf("Unsupported packet type\n\r");
@@ -2168,8 +2070,7 @@ int main() {
     shell();
   }
 
-#ifndef RISCV_CONTROLLER
   cleanup_platform();
-#endif
+
   return 0;
 }

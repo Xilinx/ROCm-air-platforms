@@ -72,9 +72,9 @@ static int amdair_pci_probe(struct pci_dev *pdev, const struct pci_device_id *en
 
 	air_dev->pdev = pdev;
 
-	/* Find all memory BARs. We are expecting 3 64-bit BARs */
+	/* Find all memory BARs. We are expecting 2 64-bit BARs */
 	bar_mask = pci_select_bars(pdev, IORESOURCE_MEM);
-	if (bar_mask != 0x15) {
+	if (bar_mask != 0x5) {
 		dev_err(&pdev->dev,
 			"These are not the bars we're looking for: 0x%x",
 			bar_mask);

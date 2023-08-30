@@ -1,4 +1,0 @@
-exe/
-*.o
-*.a
-link/crt0.S

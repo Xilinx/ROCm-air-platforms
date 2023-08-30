@@ -13,8 +13,7 @@
 
 /* The indices in config space (64-bit BARs) */
 #define DRAM_BAR_INDEX 0
-#define AIE_BAR_INDEX 2
-#define BRAM_BAR_INDEX 4
+#define BRAM_BAR_INDEX 2
 
 #define MAX_AIE_INSTANCE 1
 
@@ -39,6 +38,9 @@ extern struct amdair_aie_info aie_info;
  * @set_device_heap: Set the heap address for a given queue.
  *
  * @send_admin_queue_cmd: Send a privileged command to the command processor.
+ *
+ * @get_aie_mem_range: Gets the range of the AIE CSRs so we can validate 
+ * addresses we send during configuration.
  */
 struct amdair_device_asic_funcs {
 	void (*init_queues)(struct amdair_device *air_dev);
@@ -49,6 +51,7 @@ struct amdair_device_asic_funcs {
 	void (*send_admin_queue_cmd_and_wait)(struct amdair_device *air_dev,
 					      uint16_t cmd_type, uint64_t *arg,
 					      int num_args);
+  uint64_t (*get_aie_mem_range)(void);
 };
 
 /**

@@ -618,9 +618,9 @@ static int validate_aie_address(uint64_t offset, struct amdair_device *dev)
 	}
 
 	/* range within the specified BAR */
-	if (offset >= dev->aie_bar_len) {
+	if (offset >= dev->dev_asic_funcs->get_aie_mem_range()) { 
 		printk("%s: invalid offset 0x%llx (max 0x%llx)\n", __func__,
-		       offset, dev->aie_bar_len);
+		       offset, dev->dev_asic_funcs->get_aie_mem_range());
 		return AIE_ADDR_RANGE;
 	}
 

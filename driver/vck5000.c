@@ -5,7 +5,11 @@
 #include "amdair_device.h"
 #include "amdair_queue.h"
 #include "vck5000_regs.h"
+#include "vck5000.h"
 
+static uint64_t vck5000_get_aie_mem_range(void) {
+  return VCK5000_AIE_MEM_RANGE;
+}
 
 static uint32_t vck5000_bram_reg_read32(struct amdair_device *air_dev,
 				       int reg_off)
@@ -149,7 +153,8 @@ static struct amdair_device_asic_funcs vck5000_asic_funcs = {
 	.init_queues = &vck5000_init_queues,
 	.init_doorbells = &vck5000_init_doorbells,
 	.set_device_heap = &vck5000_set_device_heap,
-	.send_admin_queue_cmd_and_wait = &vck5000_send_admin_queue_cmd_and_wait
+  .send_admin_queue_cmd_and_wait = &vck5000_send_admin_queue_cmd_and_wait,
+  .get_aie_mem_range =  &vck5000_get_aie_mem_range
 };
 
 void vck5000_dev_init(struct amdair_device *air_dev)

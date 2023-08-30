@@ -36,15 +36,10 @@ int amdair_device_init(struct amdair_device *air_dev,
 	dev_info(&pdev->dev, "DRAM BAR 0 0x%lx (0x%llx)",
 		 (unsigned long)air_dev->dram_base, air_dev->dram_size);
 
-	air_dev->aie_bar_len = pci_resource_len(pdev, AIE_BAR_INDEX);
-	air_dev->aie_bar = pcim_iomap_table(pdev)[AIE_BAR_INDEX];
-	dev_info(&pdev->dev, "AIE BAR 2 0x%lx (0x%llx)",
-		 (unsigned long)air_dev->aie_bar, air_dev->aie_bar_len);
-
 	air_dev->bram_base = pci_resource_start(pdev, BRAM_BAR_INDEX);
 	air_dev->bram_size = pci_resource_len(pdev, BRAM_BAR_INDEX);
 	air_dev->bram_bar = pcim_iomap_table(pdev)[BRAM_BAR_INDEX];
-	dev_info(&pdev->dev, "BRAM BAR 4 0x%lx (0x%llx)",
+	dev_info(&pdev->dev, "BRAM BAR 2 0x%lx (0x%llx)",
 		 (unsigned long)air_dev->bram_bar, air_dev->bram_size);
 
 	air_dev->dev_asic_funcs->init_queues(air_dev);
