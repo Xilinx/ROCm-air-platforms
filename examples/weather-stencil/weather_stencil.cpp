@@ -356,72 +356,7 @@ int main(int argc, char *argv[]) {
   queues.push_back(q);
   assert(queues.size() > 0 && "No queues were sucesfully created!");
 
-  //
-  // Initializing the device
-  //
-  uint64_t wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  uint64_t packet_id = wr_idx % queues[0]->size;
-
-  // Initialize the AQL packet
-  hsa_agent_dispatch_packet_t shim_pkt;
-  shim_pkt.arg[0] = 0;
-  shim_pkt.arg[0] |= (AIR_ADDRESS_ABSOLUTE_RANGE << 48);
-  shim_pkt.arg[0] |= ((uint64_t)XAIE_NUM_COLS << 40);
-  shim_pkt.type = AIR_PKT_TYPE_DEVICE_INITIALIZE;
-  shim_pkt.header = (HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE);
-
-  // Creating a completion signal for the packet
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &shim_pkt.completion_signal);
-
-  // Writing the segment initialization packet to the queue
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = shim_pkt;
-
-  // Ringing the doorbell to notify the command processor of the packet
-  hsa_signal_store_screlease(queues[0]->doorbell_signal, wr_idx);
-
-  // wait for packet completion
-  while (hsa_signal_wait_scacquire(shim_pkt.completion_signal,
-                             HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                             HSA_WAIT_STATE_ACTIVE) != 0);
-
-  // Destroying the completion signal as we no longer need it
-  hsa_signal_destroy(shim_pkt.completion_signal);
-
-  //
-  // Setting up a segment
-  //
-  wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  packet_id = wr_idx % queues[0]->size;
-
-  // Initialize the AQL packet
-  hsa_agent_dispatch_packet_t herd_pkt;
-  herd_pkt.arg[0] = 0;
-  herd_pkt.arg[0] |= (AIR_ADDRESS_ABSOLUTE_RANGE << 48);
-  herd_pkt.arg[0] |= ((uint64_t)num_cols) << 40;
-  herd_pkt.arg[0] |= ((uint64_t)shim_one_col) << 32;
-  herd_pkt.arg[0] |= ((uint64_t)num_rows) << 24;
-  herd_pkt.arg[0] |= ((uint64_t)row) << 16;
-  herd_pkt.arg[1] = 0; // Herd ID
-  herd_pkt.type = AIR_PKT_TYPE_SEGMENT_INITIALIZE;
-  herd_pkt.header = (HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE);
-
-  // Creating a completion signal for the packet
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &herd_pkt.completion_signal);
-
-  // Writing the segment initialization packet to the queue
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = herd_pkt;
-
-  // Ringing the doorbell to notify the command processor of the packet
-  hsa_signal_store_screlease(queues[0]->doorbell_signal, wr_idx);
-
-  // wait for packet completion
-  while (hsa_signal_wait_scacquire(herd_pkt.completion_signal,
-                             HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
-                             HSA_WAIT_STATE_ACTIVE) != 0);
-
-  // Destroying the completion signal as we no longer need it
-  hsa_signal_destroy(herd_pkt.completion_signal);
-
+  // Configuring the device
   auto airbin_ret = air_load_airbin(&agents[0], queues[0], "airbin.elf", shim_one_col);
   if (airbin_ret != HSA_STATUS_SUCCESS) {
     printf("Loading airbin failed: %d\n", airbin_ret);
@@ -467,8 +402,8 @@ int main(int argc, char *argv[]) {
   //
   // send the data
   //
-  wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  packet_id = wr_idx % queues[0]->size;
+  uint64_t wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
+  uint64_t packet_id = wr_idx % queues[0]->size;
   hsa_agent_dispatch_packet_t pkt;
   air_packet_nd_memcpy(&pkt, 0, shim_one_col, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_0),
