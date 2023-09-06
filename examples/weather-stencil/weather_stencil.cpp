@@ -25,11 +25,11 @@
 #define DMA_COUNT_IN 256 * INPUT_ROWS
 #define DMA_COUNT_OUT 256 * 2 * B_BLOCK_DEPTH
 
-// TODO: These to the runtime library in their proper location
+// NOTE: These will shortly be moved to
+// the converged ROCm runtime
 #define AIR_PKT_TYPE_ND_MEMCPY 0x0103L
 #define AIR_PKT_TYPE_AIRBIN 0x53L
 
-// TODO: Move this to the runtime library
 /*
   Each entry describes a loadable section in device memory. The device uses
   this information to load the data into AIE memory. This definition is shared
@@ -41,10 +41,9 @@ struct airbin_table_entry {
   uint64_t addr;   // base address to load the data
 };
 
-// TODO: Figure out what I am going to do with this
+// Use a global variable to story the memory pool information
 hsa_amd_memory_pool_t global_mem_pool;
 
-// TODO: Move these to the runtime library
 /*
   'table' is an offset from the beginning of device memory
 */
@@ -57,7 +56,6 @@ hsa_status_t air_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt,
   return HSA_STATUS_SUCCESS;
 }
 
-// TODO: Move this to the runtime library
 hsa_status_t
 air_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint16_t herd_id, uint8_t col,
                      uint8_t direction, uint8_t channel, uint8_t burst_len,
@@ -89,7 +87,6 @@ air_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint16_t herd_id, uint8_t
   return HSA_STATUS_SUCCESS;
 }
 
-// TODO: Move these to the runtime library
 /*
   Load an airbin from a file into a device
 */
