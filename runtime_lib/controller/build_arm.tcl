@@ -29,8 +29,13 @@ importsources -name acdc_agent -soft-link -path [file join $root_directory "runt
 importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/memory.h"]
 importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/platform.cpp"]
 importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/platform.h"]
+importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/cdma.cpp"]
+importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/cdma.h"]
 importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/shell.cpp"]
 importsources -name acdc_agent -soft-link -path [file join $root_directory "runtime_lib/controller/shell.h"]
 app config -name acdc_agent include-path [file join $root_directory "runtime_lib/airhost/include"]
+
+# define ARM_CONTROLLER
+configapp -app acdc_agent define-compiler-symbols ARM_CONTROLLER
 
 app build -name acdc_agent

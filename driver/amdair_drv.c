@@ -153,6 +153,6 @@ module_param(enable_aie, bool, 0644);
 MODULE_PARM_DESC(enable_aie, "Enable debug access to AIE BAR");
 
 MODULE_LICENSE("Dual MIT/GPL");
-MODULE_AUTHOR("Joel Nider <joel.nider@amd.com>");
+MODULE_AUTHOR("AMD Research and Advanced Development");
 MODULE_DESCRIPTION("AMD AIR driver");
 MODULE_VERSION("1.0");

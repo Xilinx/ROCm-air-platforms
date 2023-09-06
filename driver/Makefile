@@ -13,3 +13,8 @@ endif # KERNELRELEASE
 
 clean:
 	rm -f *.o *.ko *.a *.order *.mod.c *.symvers *.mod
+
+.PHONY: tags
+
+tags:
+	ctags -R -f tags .
