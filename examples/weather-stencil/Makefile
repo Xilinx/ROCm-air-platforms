@@ -6,16 +6,27 @@ CC=clang
 LDFLAGS = -fuse-ld=lld -rdynamic \
 		-lstdc++ \
 		-lm \
-		-Wl,--no-as-needed -ldl \
-    -Wl,-rpath,/scratch/tgutierr/rocm/lib /scratch/tgutierr/rocm/lib/libhsa-runtime64.so.1.9.0 \
-    /scratch/eddier/mlir-air-rocr-airbin/mlir-air/elfutils/libelf/libelf.a \
+    		-Wl,-rpath,${ROCM_ROOT}/lib ${ROCM_ROOT}/lib/libhsa-runtime64.so.1.9.0 \
+    		${ELFUTILS_ROOT}/libelf.a \
 
-CFLAGS += -I/scratch/tgutierr/rocm/include
+CFLAGS += -I/${ROCM_ROOT}/include
 
-all: weather_stencil.exe
+.PHONY: check_rocm check_elfutils
+
+all: check_rocm check_elfutils weather_stencil.exe
+
+check_rocm:
+ifndef ROCM_ROOT
+	$(error ROCM_ROOT is not set)
+endif
+
+check_elfutils:
+ifndef ELFUTILS_ROOT
+	$(error ELFUTILS_ROOT is not set)
+endif
 
 %.exe: weather_stencil.cpp
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ weather_stencil.cpp -Wl,--whole-archive -Wl,--no-whole-archive
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ weather_stencil.cpp
 
 
 clean::

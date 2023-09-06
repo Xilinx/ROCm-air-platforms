@@ -1,7 +1,7 @@
 # SPARTA: Spatial Acceleration for Efficient and Scalable Horizontal Diffusion Weather Stencil Computation
 
 ## How to run the application
-We provide a configuration file `airbin.elf` which contains the configuration of a 48-AIE design. We also provide the host code in `weather_stencil.cpp` which utilizes the converged ROCm runtime to communicate with the device, configure the AIEs with this design, perform memory allocation, etc. Run the following commands to compile and run the configuration on the AIEs:
+We provide a configuration file `airbin.elf` which contains the configuration of a 48-AIE design. We also provide the host code in `weather_stencil.cpp` which utilizes the converged ROCm runtime to communicate with the device, configure the AIEs with this design, perform memory allocation, etc. This application requires the [experimental converged ROCm runtime](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air). Please refer to the documentation in the experimental ROCm branch on how to perform the installation. This application also requires libelf and utils. Please run `apt install libelf-dev elfutils` to install these tools. When this is done, you must set `ROCM_ROOT` and `ELFUTILS_ROOT` to their proper values to compile the host code. Now, once ROCm and elfutils are installed, run the following commands to compile and run the weather stencil on the AIEs on the VCK5000:
 
 ```
 make
