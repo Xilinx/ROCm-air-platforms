@@ -13,27 +13,20 @@
 #include <time.h>
 #include <unistd.h>
 #include <vector>
-
 #include <sys/stat.h>
 #include <gelf.h>
 
 #include "hsa/hsa.h"
 #include "hsa/hsa_ext_amd.h"
 
-#define TOTAL_B_BLOCK 1 // only 1
+// Used to define the size of the application data
 #define B_BLOCK_DEPTH 4 // set how many rows
-#define HDIFF_COL 3     // columns
-#define START_ROW 1
 #define INPUT_ROWS 9
 #define DMA_COUNT_IN 256 * INPUT_ROWS
 #define DMA_COUNT_OUT 256 * 2 * B_BLOCK_DEPTH
-#define XAIE_NUM_COLS 10
 
 // TODO: These to the runtime library in their proper location
-#define AIR_PKT_TYPE_DEVICE_INITIALIZE 0x0010L
-#define AIR_PKT_TYPE_SEGMENT_INITIALIZE 0x0011L
 #define AIR_PKT_TYPE_ND_MEMCPY 0x0103L
-#define AIR_ADDRESS_ABSOLUTE_RANGE 0x1L
 #define AIR_PKT_TYPE_AIRBIN 0x53L
 
 // TODO: Move this to the runtime library
@@ -60,6 +53,38 @@ hsa_status_t air_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt,
   pkt->type = AIR_PKT_TYPE_AIRBIN;
   pkt->header = (HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE);
   pkt->arg[0] = table;
+
+  return HSA_STATUS_SUCCESS;
+}
+
+// TODO: Move this to the runtime library
+hsa_status_t
+air_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint16_t herd_id, uint8_t col,
+                     uint8_t direction, uint8_t channel, uint8_t burst_len,
+                     uint8_t memory_space, uint64_t phys_addr,
+                     uint32_t transfer_length1d, uint32_t transfer_length2d,
+                     uint32_t transfer_stride2d, uint32_t transfer_length3d,
+                     uint32_t transfer_stride3d, uint32_t transfer_length4d,
+                     uint32_t transfer_stride4d) {
+
+  pkt->arg[0] = 0;
+  pkt->arg[0] |= ((uint64_t)memory_space) << 16;
+  pkt->arg[0] |= ((uint64_t)channel) << 24;
+  pkt->arg[0] |= ((uint64_t)col) << 32;
+  pkt->arg[0] |= ((uint64_t)burst_len) << 52;
+  pkt->arg[0] |= ((uint64_t)direction) << 60;
+
+  pkt->arg[1] = phys_addr;
+  pkt->arg[2] = transfer_length1d;
+  pkt->arg[2] |= ((uint64_t)transfer_length2d) << 32;
+  pkt->arg[2] |= ((uint64_t)transfer_stride2d) << 48;
+  pkt->arg[3] = transfer_length3d;
+  pkt->arg[3] |= ((uint64_t)transfer_stride3d) << 16;
+  pkt->arg[3] |= ((uint64_t)transfer_length4d) << 32;
+  pkt->arg[3] |= ((uint64_t)transfer_stride4d) << 48;
+
+  pkt->type = AIR_PKT_TYPE_ND_MEMCPY;
+  pkt->header = (HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE);
 
   return HSA_STATUS_SUCCESS;
 }
@@ -112,8 +137,6 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   }
 
   // get some DRAM from the device
-  //dram_ptr = (uint8_t *)air_malloc(dram_size);
-  // Doing the thing :D 
   hsa_amd_memory_pool_allocate(global_mem_pool, dram_size, 0, (void **)&dram_ptr);
 
   if (dram_ptr == MAP_FAILED) {
@@ -238,38 +261,6 @@ err_dev_mem_alloc:
   return ret;
 }
 
-// TODO: Move this to the runtime library
-hsa_status_t
-air_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint16_t herd_id, uint8_t col,
-                     uint8_t direction, uint8_t channel, uint8_t burst_len,
-                     uint8_t memory_space, uint64_t phys_addr,
-                     uint32_t transfer_length1d, uint32_t transfer_length2d,
-                     uint32_t transfer_stride2d, uint32_t transfer_length3d,
-                     uint32_t transfer_stride3d, uint32_t transfer_length4d,
-                     uint32_t transfer_stride4d) {
-
-  pkt->arg[0] = 0;
-  pkt->arg[0] |= ((uint64_t)memory_space) << 16;
-  pkt->arg[0] |= ((uint64_t)channel) << 24;
-  pkt->arg[0] |= ((uint64_t)col) << 32;
-  pkt->arg[0] |= ((uint64_t)burst_len) << 52;
-  pkt->arg[0] |= ((uint64_t)direction) << 60;
-
-  pkt->arg[1] = phys_addr;
-  pkt->arg[2] = transfer_length1d;
-  pkt->arg[2] |= ((uint64_t)transfer_length2d) << 32;
-  pkt->arg[2] |= ((uint64_t)transfer_stride2d) << 48;
-  pkt->arg[3] = transfer_length3d;
-  pkt->arg[3] |= ((uint64_t)transfer_stride3d) << 16;
-  pkt->arg[3] |= ((uint64_t)transfer_length4d) << 32;
-  pkt->arg[3] |= ((uint64_t)transfer_stride4d) << 48;
-
-  pkt->type = AIR_PKT_TYPE_ND_MEMCPY;
-  pkt->header = (HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE);
-
-  return HSA_STATUS_SUCCESS;
-}
-
 hsa_status_t IterateAgents(hsa_agent_t agent, void *data) {
   hsa_status_t status(HSA_STATUS_SUCCESS);
   hsa_device_type_t device_type;
@@ -300,7 +291,6 @@ hsa_status_t IterateMemPool(hsa_amd_memory_pool_t pool, void *data) {
   status = hsa_amd_memory_pool_get_info(pool, HSA_AMD_MEMORY_POOL_INFO_SEGMENT,
                                         &segment_type);
   if (segment_type == HSA_REGION_SEGMENT_GLOBAL) {
-    printf("Runtime: found global segment");
     *reinterpret_cast<hsa_amd_memory_pool_t*>(data) = pool;
   }
 
@@ -310,11 +300,7 @@ hsa_status_t IterateMemPool(hsa_amd_memory_pool_t pool, void *data) {
 int main(int argc, char *argv[]) {
 
   // Starting in the first DU of the VCK5000
-  uint64_t row = 0;
-  uint64_t shim_one_col = 2;
-  uint64_t shim_two_col = 3;
-  uint8_t num_cols = 8;
-  uint8_t num_rows = 8;
+  uint64_t starting_col = 2;
 
   // HSA datastructures
   std::vector<hsa_agent_t> agents;
@@ -330,17 +316,14 @@ int main(int argc, char *argv[]) {
  
   // Finding all AIE HSA agents
   hsa_iterate_agents(&IterateAgents, reinterpret_cast<void*>(&agents));
-  printf("Runtime: found %d AIE agents\n", agents.size());
 
   // Iterating over memory pools to initialize our allocator
-  printf("Runtime: initializing memory pools");
   hsa_amd_agent_iterate_memory_pools(agents.front(),
                                      IterateMemPool,
                                      reinterpret_cast<void*>(&global_mem_pool));
 
   // Getting the size of queue the agent supports
   hsa_agent_get_info(agents[0], HSA_AGENT_INFO_QUEUE_MAX_SIZE, &aie_max_queue_size);
-  std::cout << "Max AIE queue size: " << aie_max_queue_size << std::endl;
 
   // Creating a queue
   hsa_queue_t *q = NULL;
@@ -357,7 +340,7 @@ int main(int argc, char *argv[]) {
   assert(queues.size() > 0 && "No queues were sucesfully created!");
 
   // Configuring the device
-  auto airbin_ret = air_load_airbin(&agents[0], queues[0], "airbin.elf", shim_one_col);
+  auto airbin_ret = air_load_airbin(&agents[0], queues[0], "airbin.elf", starting_col);
   if (airbin_ret != HSA_STATUS_SUCCESS) {
     printf("Loading airbin failed: %d\n", airbin_ret);
     return -1;
@@ -405,7 +388,7 @@ int main(int argc, char *argv[]) {
   uint64_t wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
   uint64_t packet_id = wr_idx % queues[0]->size;
   hsa_agent_dispatch_packet_t pkt;
-  air_packet_nd_memcpy(&pkt, 0, shim_one_col, 1, 0, 4, 2,
+  air_packet_nd_memcpy(&pkt, 0, starting_col, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_0),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
   hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt.completion_signal);
@@ -418,7 +401,7 @@ int main(int argc, char *argv[]) {
   wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
   packet_id = wr_idx % queues[0]->size;
   hsa_agent_dispatch_packet_t pkt2;
-  air_packet_nd_memcpy(&pkt2, 0, shim_one_col, 0, 0, 4, 2,
+  air_packet_nd_memcpy(&pkt2, 0, starting_col, 0, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_0),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
   hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt2.completion_signal);
@@ -432,7 +415,7 @@ int main(int argc, char *argv[]) {
   wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
   packet_id = wr_idx % queues[0]->size;
   hsa_agent_dispatch_packet_t pkt3;
-  air_packet_nd_memcpy(&pkt3, 0, shim_one_col, 1, 1, 4, 2,
+  air_packet_nd_memcpy(&pkt3, 0, starting_col, 1, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_1),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
   hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt3.completion_signal);
@@ -445,7 +428,7 @@ int main(int argc, char *argv[]) {
   wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
   packet_id = wr_idx % queues[0]->size;
   hsa_agent_dispatch_packet_t pkt4;
-  air_packet_nd_memcpy(&pkt4, 0, shim_one_col, 0, 1, 4, 2,
+  air_packet_nd_memcpy(&pkt4, 0, starting_col, 0, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_1),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
   hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt4.completion_signal);
@@ -459,7 +442,7 @@ int main(int argc, char *argv[]) {
   wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
   packet_id = wr_idx % queues[0]->size;
   hsa_agent_dispatch_packet_t pkt5;
-  air_packet_nd_memcpy(&pkt5, 0, shim_two_col, 1, 0, 4, 2,
+  air_packet_nd_memcpy(&pkt5, 0, starting_col+1, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_2),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
   hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt5.completion_signal);
@@ -472,7 +455,7 @@ int main(int argc, char *argv[]) {
   wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
   packet_id = wr_idx % queues[0]->size;
   hsa_agent_dispatch_packet_t pkt6;
-  air_packet_nd_memcpy(&pkt6, 0, shim_two_col, 0, 0, 4, 2,
+  air_packet_nd_memcpy(&pkt6, 0, starting_col+1, 0, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_2),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
   hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt6.completion_signal);
@@ -486,7 +469,7 @@ int main(int argc, char *argv[]) {
   wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
   packet_id = wr_idx % queues[0]->size;
   hsa_agent_dispatch_packet_t pkt7;
-  air_packet_nd_memcpy(&pkt7, 0, shim_two_col, 1, 1, 4, 2,
+  air_packet_nd_memcpy(&pkt7, 0, starting_col+1, 1, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_3),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
   hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt7.completion_signal);
@@ -499,7 +482,7 @@ int main(int argc, char *argv[]) {
   wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
   packet_id = wr_idx % queues[0]->size;
   hsa_agent_dispatch_packet_t pkt8;
-  air_packet_nd_memcpy(&pkt8, 0, shim_two_col, 0, 1, 4, 2,
+  air_packet_nd_memcpy(&pkt8, 0, starting_col+1, 0, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_3),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
   hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt8.completion_signal);
@@ -546,6 +529,11 @@ int main(int argc, char *argv[]) {
              ddr_ptr_out_0[i], i, ddr_ptr_out_3[i]);
       errors++;
     }
+
+    printf("ddr_ptr_out_0[%d] = %d\n", i, ddr_ptr_out_0[i]);
+    printf("ddr_ptr_out_1[%d] = %d\n", i, ddr_ptr_out_1[i]);
+    printf("ddr_ptr_out_2[%d] = %d\n", i, ddr_ptr_out_2[i]);
+    printf("ddr_ptr_out_3[%d] = %d\n", i, ddr_ptr_out_3[i]);
   }
 
   // destroying the queue

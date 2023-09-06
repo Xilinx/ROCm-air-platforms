@@ -4,7 +4,7 @@
 We provide a configuration file `airbin.elf` which contains the configuration of a 48-AIE design. We also provide the host code in `weather_stencil.cpp` which utilizes the converged ROCm runtime to communicate with the device, configure the AIEs with this design, perform memory allocation, etc. Run the following commands to compile and run the configuration on the AIEs:
 
 ```
-Make
+make
 ./weather_stencil.exe
 ```
 
