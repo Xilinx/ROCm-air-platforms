@@ -1,12 +1,27 @@
 # SPARTA: Spatial Acceleration for Efficient and Scalable Horizontal Diffusion Weather Stencil Computation
 
+## Platform Description
+
+The VCK5000 is an array of 384 AIEs organized in an array of 8x48. In addition, a number of columns contain shim DMAs, whose purpose is to perform the data movement between the AIE array and device memory. To regularize the AIE array, we refer to the entire array as a Data Flow Processing Cluster (DPC). To regularize the DPC, we split the array into 6 Dataflow Units (DUs) organized in 8x8 AIEs and two shim DMAs. The platform contains a Device Command Processor (CP) which configures the AIEs and shim DMAs in the DUs. We provide a relocatable AIE binary in the `sparta-1DU.elf` file, which can configure any of the DUs on the VCK5000. To target a different DU, all that needs to be done is to change the `starting_col` variable in the `weather_stencil.cpp` file. The starting colums of the DUs on the VCK5000 are: 2, 10, 18, 26, 34, and 42. 
+
+<p align="center">
+  <picture>
+  	<source media="(prefers-color-scheme: light)" srcset="img/du.png">
+  <img alt="hdiff-comp" src="img/du.png" width="400">
+  </picture>
+  <br>
+  <b>Figure 1: AIR VCK5000 Platform Configuration</b>
+</p>
+
+
 ## How to run the application
-We provide a configuration file `airbin.elf` which contains the configuration of a 48-AIE design. We also provide the host code in `weather_stencil.cpp` which utilizes the converged ROCm runtime to communicate with the device, configure the AIEs with this design, perform memory allocation, etc. This application requires the [experimental converged ROCm runtime](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air). Please refer to the documentation in the experimental ROCm branch on how to perform the installation. This application also requires libelf and utils. Please run `apt install libelf-dev elfutils` to install these tools. When this is done, you must set `ROCM_ROOT` and `ELFUTILS_ROOT` to their proper values to compile the host code. Now, once ROCm and elfutils are installed, run the following commands to compile and run the weather stencil on the AIEs on the VCK5000:
+We provide a configuration file `sparta-1DU.elf` which contains the configuration of a 48-AIE design in a single DU of the VCK5000. We also provide the host code in `weather_stencil.cpp` which utilizes the converged ROCm runtime to communicate with the device, configure the AIEs with this design, perform memory allocation, etc. This application requires the [experimental converged ROCm runtime](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air). Please refer to the documentation in the experimental ROCm branch on how to perform the installation. This application also requires libelf and utils. Please run `apt install libelf-dev elfutils` to install these tools. When this is done, you must set `ROCM_ROOT` and `ELFUTILS_ROOT` to their proper values to compile the host code. Now, once ROCm and elfutils are installed, run the following commands to compile and run the weather stencil on the AIEs on the VCK5000:
 
 ```
 make
 ./weather_stencil.exe
 ```
+
 
 ## Application Description
 A stencil operation sweeps over an input grid, updating values based on a fixed pattern. High-order stencils are applied to multidimensional grids that have sparse and irregular memory access patterns, limiting the achievable performance. In addition, stencils have a limited cache data reuse which further enhances memory access pressure. 
@@ -20,7 +35,7 @@ Real-world climate and weather simulations involve the utilization of complex co
   <img alt="hdiff-comp" src="img/hdiff_comp.png" width="400">
   </picture>
   <br>
-  <b>Figure 1: Horizontal diffusion (hdiff) kernel composition using Laplacian and flux stencils in a two dimensional plane</b>
+  <b>Figure 2: Horizontal diffusion (hdiff) kernel composition using Laplacian and flux stencils in a two dimensional plane</b>
 </p>
 
 Our goal is to mitigate the performance bottleneck of memory-bound weather stencil computation using AMD-Xilinx Versal AI Engine (AIE). To this end, we introduce SPARTA, a novel spatial accelerator for horizontal diffusion stencil computation. We exploit the two-dimensional spatial architecture to efficiently accelerate horizontal diffusion stencil. We design the first scaled-out spatial accelerator using MLIR (multi-level intermediate representation) compiler framework.
@@ -59,9 +74,6 @@ We develop a *bundle* or *B-block*-based design. A B-block is a cluster of AIE c
 </p>
 
 As AIE architecture lacks support for automatically gathering and ordering of computed outputs, we use physical placement constraints to allow the AIE cores in the last column to access a single shared memory of a dedicated AIE core, enabling data gathering. We refer to this core as the *gather core*. The gather core is responsible for collecting data from all other cores, in addition to processing the results of its own lane. A single B-block operates on a single plane of the input data. Since two B-blocks can be connected to a single shimDMA, two planes can be served per shimDMA. This regular structure can then be repeated for all the shimDMA channels present on a Versal device. 
-
-## More Information
-[SPARTA](https://github.com/Xilinx/mlir-aie/tree/main/reference_designs/horizontal_diffusion)
 
 # Citation
 >Gagandeep Singh, Alireza Khodamoradi, Kristof Denolf, Jack Lo, Juan Gómez-Luna, Joseph Melber, Andra Bisca, Henk Corporaal, Onur Mutlu.

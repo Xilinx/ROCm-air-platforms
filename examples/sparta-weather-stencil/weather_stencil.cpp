@@ -1,16 +1,10 @@
+// (C) 2023, Advanced Micro Devices, Inc.
 // (c) 2023 SAFARI Research Group at ETH Zurich, Gagandeep Singh, D-ITET
 // SPDX-License-Identifier: MIT
 
-#include <cassert>
-#include <cmath>
-#include <cstdio>
 #include <cstring>
 #include <fcntl.h>
 #include <iostream>
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <thread>
-#include <time.h>
 #include <unistd.h>
 #include <vector>
 #include <sys/stat.h>
@@ -29,6 +23,11 @@
 // the converged ROCm runtime
 #define AIR_PKT_TYPE_ND_MEMCPY 0x0103L
 #define AIR_PKT_TYPE_AIRBIN 0x53L
+
+/*
+  Defining the size of memory we allocate to store the AIE configuration
+*/
+constexpr uint64_t BINARY_REGION_SIZE = 6 * 1024 * 1024;
 
 /*
   Each entry describes a loadable section in device memory. The device uses
@@ -93,12 +92,9 @@ air_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint16_t herd_id, uint8_t
 hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
                              const char *filename, uint8_t column) {
   hsa_status_t ret = HSA_STATUS_SUCCESS;
-  int drv_fd = 0, elf_fd = 0;
-  uint32_t dram_size;
+  int elf_fd = 0;
   uint8_t *dram_ptr = NULL;
   uint8_t *data_ptr = NULL;
-  struct timespec ts_start;
-  struct timespec ts_end;
   Elf *inelf = NULL;
   GElf_Ehdr *ehdr = NULL;
   GElf_Ehdr ehdr_mem;
@@ -111,33 +107,27 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   uint32_t table_size = 0;
   struct stat elf_stat;
 
-  auto time_spec_diff = [](struct timespec &start, struct timespec &end) {
-    return (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec);
-  };
-
   // open the AIRBIN file
   elf_fd = open(filename, O_RDONLY);
   if (elf_fd < 0) {
-    printf("Can't open %s\n", filename);
+    std::cout << "Can't open " << filename << std::endl;
     ret = HSA_STATUS_ERROR_INVALID_FILE;
     goto err_elf_open;
   }
 
   // calculate the size needed to load
   fstat(elf_fd, &elf_stat);
-  //dram_size = elf_stat.st_size;
-  dram_size = 6 * 1024 * 1024;
-  if(table_size > dram_size) {
-    printf("[ERROR] table size is larger than allocated DRAM. Exiting\n");
+  if(table_size > BINARY_REGION_SIZE) {
+    std::cout << "Table size is larger than allocated DRAM. Exiting\n" << std::endl;
     ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
     goto err_elf_open;
   }
 
   // get some DRAM from the device
-  hsa_amd_memory_pool_allocate(global_mem_pool, dram_size, 0, (void **)&dram_ptr);
+  hsa_amd_memory_pool_allocate(global_mem_pool, BINARY_REGION_SIZE, 0, (void **)&dram_ptr);
 
-  if (dram_ptr == MAP_FAILED) {
-    printf("Error allocating %u DRAM\n", dram_size);
+  if (dram_ptr == NULL) {
+    std::cout << "Error allocating " << BINARY_REGION_SIZE << " DRAM"<< std::endl;
     ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
     goto err_dev_mem_alloc;
   }
@@ -147,7 +137,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   inelf = elf_begin(elf_fd, ELF_C_READ, NULL);
   ehdr = gelf_getehdr(inelf, &ehdr_mem);
   if (ehdr == NULL) {
-    printf("cannot get ELF header: %s\n", elf_errmsg(-1));
+    std::cout << "cannot get ELF header: " <<  elf_errmsg(-1) << std::endl;
     ret = HSA_STATUS_ERROR_INVALID_FILE;
     goto err_elf_read;
   }
@@ -155,13 +145,13 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   // Read data as 64-bit little endian
   if ((ehdr->e_ident[EI_CLASS] != ELFCLASS64) ||
       (ehdr->e_ident[EI_DATA] != ELFDATA2LSB)) {
-    printf("unexpected ELF format\n");
+    std::cout << "unexpected ELF format\n" << std::endl;
     ret = HSA_STATUS_ERROR_INVALID_FILE;
     goto err_elf_read;
   }
 
   if (elf_getshdrnum(inelf, &shnum) != 0) {
-    printf("cannot get program header count: %s", elf_errmsg(-1));
+    std::cout << "cannot get program header count: " << elf_errmsg(-1) << std::endl;
     ret = HSA_STATUS_ERROR_INVALID_FILE;
     goto err_elf_read;
   }
@@ -184,7 +174,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
     GElf_Shdr shdr;
     Elf_Scn *sec = elf_getscn(inelf, ndx);
     if (sec == NULL) {
-      printf("cannot get section %d: %s", ndx, elf_errmsg(-1));
+      std::cout << "cannot get section " <<  ndx << " " << elf_errmsg(-1) << std::endl;
       ret = HSA_STATUS_ERROR_INVALID_FILE;
       goto err_elf_read;
     }
@@ -199,7 +189,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
     Elf_Data *desc;
     desc = elf_getdata(sec, NULL);
     if (!desc) {
-      printf("Error reading data for section %u\n", ndx);
+      std::cout << "Error reading data for section" << ndx << std::endl;
       ret = HSA_STATUS_ERROR_INVALID_FILE;
       goto err_elf_read;
     }
@@ -213,8 +203,8 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
     data_offset += shdr.sh_size;
     data_ptr += shdr.sh_size;
 
-    if(data_offset > dram_size) {
-      printf("[ERROR] Overwriting allocated DRAM size. Exiting\n");
+    if(data_offset > BINARY_REGION_SIZE) {
+      std::cout << "[ERROR] Overwriting allocated DRAM size. Exiting\n" << std::endl;
       ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
       goto err_elf_read;
     }
@@ -244,10 +234,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
                              HSA_WAIT_STATE_ACTIVE) != 0);
 
   hsa_signal_destroy(pkt.completion_signal);
-  // clock_gettime(CLOCK_BOOTTIME, &ts_end);
 
-  // printf("airbin loading time: %0.8f sec\n", time_spec_diff(ts_start,
-  // ts_end));
 
 err_elf_read:
   elf_end(inelf);
@@ -330,14 +317,18 @@ int main(int argc, char *argv[]) {
 
   if(queue_create_status != HSA_STATUS_SUCCESS) {
     std::cout << "hsa_queue_create failed" << std::endl;
+    return -1;
   }
 
   // Adding to our vector of queues
   queues.push_back(q);
-  assert(queues.size() > 0 && "No queues were sucesfully created!");
+  if(queues.size() == 0) {
+    std::cout << "No queues were sucesfully created!" << std::endl;
+    return -1;
+  }
 
   // Configuring the device
-  auto airbin_ret = air_load_airbin(&agents[0], queues[0], "airbin.elf", starting_col);
+  auto airbin_ret = air_load_airbin(&agents[0], queues[0], "sparta-1DU.elf", starting_col);
   if (airbin_ret != HSA_STATUS_SUCCESS) {
     printf("Loading airbin failed: %d\n", airbin_ret);
     return -1;
@@ -378,6 +369,11 @@ int main(int argc, char *argv[]) {
     *(ddr_ptr_out_3 + i) = 0; // input
   }
 
+  // Creating one signal for each packet. Once it reaches zero we will know that
+  // all DMAs are complete
+  hsa_signal_t dma_signal;
+  hsa_amd_signal_create_on_agent(8, 0, nullptr, &agents[0], 0, &dma_signal);
+
   //////////////////////////////////////// B Block 0
   //
   // send the data
@@ -388,7 +384,7 @@ int main(int argc, char *argv[]) {
   air_packet_nd_memcpy(&pkt, 0, starting_col, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_0),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt.completion_signal);
+  pkt.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt;
 
   //
@@ -401,7 +397,7 @@ int main(int argc, char *argv[]) {
   air_packet_nd_memcpy(&pkt2, 0, starting_col, 0, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_0),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt2.completion_signal);
+  pkt2.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt2;
 
   //////////////////////////////////////// B Block 1
@@ -415,7 +411,7 @@ int main(int argc, char *argv[]) {
   air_packet_nd_memcpy(&pkt3, 0, starting_col, 1, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_1),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt3.completion_signal);
+  pkt3.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt3;
 
   //
@@ -428,7 +424,7 @@ int main(int argc, char *argv[]) {
   air_packet_nd_memcpy(&pkt4, 0, starting_col, 0, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_1),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt4.completion_signal);
+  pkt4.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt4;
 
   //////////////////////////////////////// B Block 2
@@ -442,7 +438,7 @@ int main(int argc, char *argv[]) {
   air_packet_nd_memcpy(&pkt5, 0, starting_col+1, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_2),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt5.completion_signal);
+  pkt5.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt5;
 
   //
@@ -455,7 +451,7 @@ int main(int argc, char *argv[]) {
   air_packet_nd_memcpy(&pkt6, 0, starting_col+1, 0, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_2),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt6.completion_signal);
+  pkt6.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt6;
 
   //////////////////////////////////////// B Block 3
@@ -469,7 +465,7 @@ int main(int argc, char *argv[]) {
   air_packet_nd_memcpy(&pkt7, 0, starting_col+1, 1, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_3),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt7.completion_signal);
+  pkt7.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt7;
 
   //
@@ -482,25 +478,19 @@ int main(int argc, char *argv[]) {
   air_packet_nd_memcpy(&pkt8, 0, starting_col+1, 0, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_3),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agents[0], 0, &pkt8.completion_signal);
+  pkt8.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt8;
 
   // Ringing the doorbell to notify the command processor of the packet
   hsa_signal_store_screlease(queues[0]->doorbell_signal, wr_idx);
 
   // wait for packet completion
-  while (hsa_signal_wait_scacquire(pkt8.completion_signal,
+  while (hsa_signal_wait_scacquire(dma_signal,
                              HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
                              HSA_WAIT_STATE_ACTIVE) != 0);
 
-  hsa_signal_destroy(pkt.completion_signal);
-  hsa_signal_destroy(pkt2.completion_signal);
-  hsa_signal_destroy(pkt3.completion_signal);
-  hsa_signal_destroy(pkt4.completion_signal);
-  hsa_signal_destroy(pkt5.completion_signal);
-  hsa_signal_destroy(pkt6.completion_signal);
-  hsa_signal_destroy(pkt7.completion_signal);
-  hsa_signal_destroy(pkt8.completion_signal);
+  // Destroying the signal
+  hsa_signal_destroy(dma_signal);
 
   for (int i = 0; i < 512; i++) {
 
