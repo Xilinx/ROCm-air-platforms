@@ -7,7 +7,7 @@ The VCK5000 is an array of 384 AIEs organized in an array of 8x48. In addition, 
 <p align="center">
   <picture>
   	<source media="(prefers-color-scheme: light)" srcset="img/du.png">
-  <img alt="hdiff-comp" src="img/du.png" width="400">
+  <img alt="hdiff-comp" src="img/du.png" width="800">
   </picture>
   <br>
   <b>Figure 1: AIR VCK5000 Platform Configuration</b>
