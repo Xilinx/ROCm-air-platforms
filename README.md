@@ -12,7 +12,7 @@ Both the experimental [rocm-5.6.x-air branch](https://github.com/RadeonOpenCompu
    
 3. **Insert the driver:** Refer to the [driver documentation](driver) on how to compile and load the driver.
    
-4. **Run the example:** Refer to the [weather stencil application](examples/weather_stencil_air) on how to compile and execute the application on the ROCm AIR platform.
+4. **Run the example:** Refer to the [weather stencil application](examples/sparta-weather-stencil) on how to compile and execute the application on the ROCm AIR platform.
 
 ## Examples
 
