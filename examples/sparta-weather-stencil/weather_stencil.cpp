@@ -110,7 +110,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   // open the AIRBIN file
   elf_fd = open(filename, O_RDONLY);
   if (elf_fd < 0) {
-    std::cout << "Can't open " << filename << std::endl;
+    std::cerr << "Can't open " << filename << std::endl;
     ret = HSA_STATUS_ERROR_INVALID_FILE;
     goto err_elf_open;
   }
@@ -118,7 +118,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   // calculate the size needed to load
   fstat(elf_fd, &elf_stat);
   if(table_size > BINARY_REGION_SIZE) {
-    std::cout << "Table size is larger than allocated DRAM. Exiting\n" << std::endl;
+    std::cerr << "Table size is larger than allocated DRAM. Exiting\n" << std::endl;
     ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
     goto err_elf_open;
   }
@@ -127,7 +127,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   hsa_amd_memory_pool_allocate(global_mem_pool, BINARY_REGION_SIZE, 0, (void **)&dram_ptr);
 
   if (dram_ptr == NULL) {
-    std::cout << "Error allocating " << BINARY_REGION_SIZE << " DRAM"<< std::endl;
+    std::cerr << "Error allocating " << BINARY_REGION_SIZE << " DRAM"<< std::endl;
     ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
     goto err_dev_mem_alloc;
   }
@@ -137,7 +137,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   inelf = elf_begin(elf_fd, ELF_C_READ, NULL);
   ehdr = gelf_getehdr(inelf, &ehdr_mem);
   if (ehdr == NULL) {
-    std::cout << "cannot get ELF header: " <<  elf_errmsg(-1) << std::endl;
+    std::cerr << "cannot get ELF header: " <<  elf_errmsg(-1) << std::endl;
     ret = HSA_STATUS_ERROR_INVALID_FILE;
     goto err_elf_read;
   }
@@ -145,13 +145,13 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   // Read data as 64-bit little endian
   if ((ehdr->e_ident[EI_CLASS] != ELFCLASS64) ||
       (ehdr->e_ident[EI_DATA] != ELFDATA2LSB)) {
-    std::cout << "unexpected ELF format\n" << std::endl;
+    std::cerr << "unexpected ELF format\n" << std::endl;
     ret = HSA_STATUS_ERROR_INVALID_FILE;
     goto err_elf_read;
   }
 
   if (elf_getshdrnum(inelf, &shnum) != 0) {
-    std::cout << "cannot get program header count: " << elf_errmsg(-1) << std::endl;
+    std::cerr << "cannot get program header count: " << elf_errmsg(-1) << std::endl;
     ret = HSA_STATUS_ERROR_INVALID_FILE;
     goto err_elf_read;
   }
@@ -174,7 +174,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
     GElf_Shdr shdr;
     Elf_Scn *sec = elf_getscn(inelf, ndx);
     if (sec == NULL) {
-      std::cout << "cannot get section " <<  ndx << " " << elf_errmsg(-1) << std::endl;
+      std::cerr << "cannot get section " <<  ndx << " " << elf_errmsg(-1) << std::endl;
       ret = HSA_STATUS_ERROR_INVALID_FILE;
       goto err_elf_read;
     }
@@ -189,7 +189,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
     Elf_Data *desc;
     desc = elf_getdata(sec, NULL);
     if (!desc) {
-      std::cout << "Error reading data for section" << ndx << std::endl;
+      std::cerr << "Error reading data for section" << ndx << std::endl;
       ret = HSA_STATUS_ERROR_INVALID_FILE;
       goto err_elf_read;
     }
@@ -204,7 +204,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
     data_ptr += shdr.sh_size;
 
     if(data_offset > BINARY_REGION_SIZE) {
-      std::cout << "[ERROR] Overwriting allocated DRAM size. Exiting\n" << std::endl;
+      std::cerr << "[ERROR] Overwriting allocated DRAM size. Exiting\n" << std::endl;
       ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
       goto err_elf_read;
     }
@@ -316,21 +316,21 @@ int main(int argc, char *argv[]) {
                               0, &q);
 
   if(queue_create_status != HSA_STATUS_SUCCESS) {
-    std::cout << "hsa_queue_create failed" << std::endl;
+    std::cerr << "hsa_queue_create failed" << std::endl;
     return -1;
   }
 
   // Adding to our vector of queues
   queues.push_back(q);
   if(queues.size() == 0) {
-    std::cout << "No queues were sucesfully created!" << std::endl;
+    std::cerr << "No queues were sucesfully created!" << std::endl;
     return -1;
   }
 
   // Configuring the device
   auto airbin_ret = air_load_airbin(&agents[0], queues[0], "sparta-1DU.elf", starting_col);
   if (airbin_ret != HSA_STATUS_SUCCESS) {
-    printf("Loading airbin failed: %d\n", airbin_ret);
+    std::cerr << "Loading airbin failed: " << airbin_ret << std::endl;
     return -1;
   }
 
@@ -495,32 +495,29 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < 512; i++) {
 
     if(ddr_ptr_out_0[i] != 514 + i) {
-      printf("[ERROR] 0x%x != 0x%x\n", ddr_ptr_out_0[i], 514 + i);
+      std::cerr << "[ERROR] " << ddr_ptr_out_0[i] << " != " << 514 + i << std::endl;
       errors++;
     }
 
     if (ddr_ptr_out_0[i] != ddr_ptr_out_1[i]) {
-      printf("[ERROR] ddr_ptr_out_0[%d] (%d) != ddr_ptr_out_1[%d (%d)]\n", i,
-             ddr_ptr_out_0[i], i, ddr_ptr_out_1[i]);
+      std::cerr << "[ERROR] ddr_ptr_out_0[" << i << "] (" << ddr_ptr_out_0[i] << ")  != ddr_ptr_out_1[" << i << "] (" << ddr_ptr_out_1[i] << ")" << std::endl;
       errors++;
     }
 
     if (ddr_ptr_out_0[i] != ddr_ptr_out_2[i]) {
-      printf("[ERROR] ddr_ptr_out_0[%d] (%d) != ddr_ptr_out_2[%d (%d)]\n", i,
-             ddr_ptr_out_0[i], i, ddr_ptr_out_2[i]);
+      std::cerr << "[ERROR] ddr_ptr_out_0[" << i << "] (" << ddr_ptr_out_0[i] << ")  != ddr_ptr_out_2[" << i << "] (" << ddr_ptr_out_2[i] << ")" << std::endl;
       errors++;
     }
 
     if (ddr_ptr_out_0[i] != ddr_ptr_out_3[i]) {
-      printf("[ERROR] ddr_ptr_out_0[%d] (%d) != ddr_ptr_out_3[%d (%d)]\n", i,
-             ddr_ptr_out_0[i], i, ddr_ptr_out_3[i]);
+      std::cerr << "[ERROR] ddr_ptr_out_0[" << i << "] (" << ddr_ptr_out_0[i] << ")  != ddr_ptr_out_3[" << i << "] (" << ddr_ptr_out_3[i] << ")" << std::endl;
       errors++;
     }
 
-    printf("ddr_ptr_out_0[%d] = %d\n", i, ddr_ptr_out_0[i]);
-    printf("ddr_ptr_out_1[%d] = %d\n", i, ddr_ptr_out_1[i]);
-    printf("ddr_ptr_out_2[%d] = %d\n", i, ddr_ptr_out_2[i]);
-    printf("ddr_ptr_out_3[%d] = %d\n", i, ddr_ptr_out_3[i]);
+    std::cout << "ddr_ptr_out_0[" << i << "] = " << ddr_ptr_out_0[i] << std::endl;
+    std::cout << "ddr_ptr_out_1[" << i << "] = " << ddr_ptr_out_1[i] << std::endl;
+    std::cout << "ddr_ptr_out_2[" << i << "] = " << ddr_ptr_out_2[i] << std::endl;
+    std::cout << "ddr_ptr_out_3[" << i << "] = " << ddr_ptr_out_3[i] << std::endl;
   }
 
   // destroying the queue
@@ -537,21 +534,21 @@ int main(int argc, char *argv[]) {
   // Check for errors
   int res = 0;
   if (!errors) {
-    printf("PASS!\n");
+    std::cout << "PASS!\n" << std::endl;
     res = 0;
   } else {
-    printf("Fail!\n");
+    std::cout << "Fail!\n" << std::endl;
     res = -1;
   }
 
   // Shutting down HSA
   hsa_ret = hsa_shut_down();
   if(hsa_ret != HSA_STATUS_SUCCESS) {
-    printf("[ERROR] hsa_shut_down() failed\n");
+    std::cerr << "[ERROR] hsa_shut_down() failed\n" << std::endl;
     return HSA_STATUS_ERROR;
   }
 
-  printf("test done weather predicted = chocolate :D\n");
+  std::cout << "test done weather predicted = chocolate :D\n" << std::endl;
 
   return 0;
 }
