@@ -47,10 +47,11 @@ hsa_amd_memory_pool_t global_mem_pool;
   'table' is an offset from the beginning of device memory
 */
 hsa_status_t air_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt,
-                                    uint64_t table) {
+                                    uint64_t table, uint16_t column) {
   pkt->type = AIR_PKT_TYPE_AIRBIN;
   pkt->header = (HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE);
   pkt->arg[0] = table;
+  pkt->arg[1] = column;
 
   return HSA_STATUS_SUCCESS;
 }
@@ -217,7 +218,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
 
   // Send configuration packet
   wr_idx = hsa_queue_add_write_index_relaxed(q, 1);
-  air_packet_load_airbin(&pkt, (uint64_t)airbin_table);
+  air_packet_load_airbin(&pkt, (uint64_t)airbin_table, (uint16_t)column);
 
   // dispatch and wait has blocking semantics so we can internally create the signal
   hsa_amd_signal_create_on_agent(1, 0, nullptr, agent, 0, &(pkt.completion_signal));
@@ -284,6 +285,8 @@ hsa_status_t IterateMemPool(hsa_amd_memory_pool_t pool, void *data) {
 int main(int argc, char *argv[]) {
 
   // Starting in the first DU of the VCK5000
+  // DUs start in the following columns:
+  // 2, 10, 18, 26, 34, and 42.
   uint64_t starting_col = 2;
 
   // HSA datastructures

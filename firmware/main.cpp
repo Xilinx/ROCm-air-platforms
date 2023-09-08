@@ -1319,15 +1319,17 @@ void handle_packet_read_write_aie_reg32(hsa_agent_dispatch_packet_t *pkt, bool i
  memory. This is necessary because the tile memory is not directly accessible
  by the host.
 */
-void handle_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt, uint16_t target_col) {
+void handle_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt) {
   uint32_t idx = 0;
   uint64_t src, dest, tile;
-  uint16_t col, row;
+  uint16_t col, row, starting_col;
   uint16_t start_col = 0xFFFF;
   uint16_t start_row = 0xFFFF;
   uint16_t end_col = 0;
   uint16_t end_row = 0;
   uint64_t table_va = pkt->arg[0];
+  uint16_t target_col = pkt->arg[1] & 0xFFFF;
+  uint64_t entry_iter = 0;
   airbin_table_entry *entry =
       (airbin_table_entry *)translate_virt_to_phys(table_va);
 
@@ -1343,10 +1345,20 @@ void handle_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt, uint16_t target
   // parse airbin table and create CDMA descriptor chain to load the data
   while (entry->size) {
     col = GET_COLUMN(entry->addr);
+
+    // Marking the first column
+    if (entry_iter == 0) {
+      starting_col = col;
+      entry_iter++;
+    }
+
+    // Shifting the design over to the target column + offset
+    col = col - starting_col + target_col;
+
     row = GET_ROW(entry->addr);
     tile = getTileAddr(col, row);
     src = translate_virt_to_phys(table_va + entry->offset);
-    dest = tile | entry->addr;
+    dest = tile | (entry->addr & 0xFFFFFF);
     air_printf("Entry: src=0x%lx dest=0x%lx size=%x\r\n", src, dest,
                entry->size);
     cdma_sg_set(idx++, dest, src, entry->size);
@@ -1862,7 +1874,7 @@ void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int qu
 
     case AIR_PKT_TYPE_AIRBIN:
       // hard-coded column number for now
-      handle_packet_load_airbin(pkt, 6);
+      handle_packet_load_airbin(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
