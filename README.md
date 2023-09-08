@@ -36,10 +36,6 @@ We provide the firmware which runs on the ARM core in the [firmware directory](f
 
 The amdair driver implements the interface for the ROCm runtime on the platform. Refer to the [driver documentation](driver) for more information.
 
-## Utils
-
-We currently house some necessary runtime functionality in the [utils directory](utils). The presence of these functions in this repository is only temporary as all runtime funcitonality will eventually be moved to the experimental [rocm-air branch](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air).
-
 ## Frequently Asked Questions
 
 **Q: What is this release?**
