@@ -16,7 +16,8 @@ cd aie_platform
 make program_vck5000
 ```
 After programming the host should undergo a **warm reboot**.
-NOTE: the machine hosting the VCK5000 card will most likely crash after programming the card. This is because the PCIe link is lost during reconfiguration and the host may report an error. This is normal, and the card will be reenumerated on the PCIe bus after a **warm reboot**.
+
+NOTE: the machine hosting the VCK5000 may crash after programming the card. This is because the PCIe link is lost during reconfiguration and the host may report an error. This is normal, and the card will be reenumerated on the PCIe bus after a **warm reboot**.
 
 ### Verifying the Device Programming
 After a warm reboot, you can verify that the card has been programmed properly with the VCK5000 AIR platfrorm by executing this command:
