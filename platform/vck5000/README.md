@@ -7,7 +7,7 @@ We present an HSA-compatible AMD AI Engine platform implemented on an [AMD VCK50
 
 ## Using a Prebuilt Platform
 
-We provide prebuilt platforms configurations in the releases of this github repository. To use one of those, download the release and move it to the `aie_platforms` repository and refer to the (Programming)[#programming-steps] instructions on how to program the board.
+We provide prebuilt platforms configurations in the releases of this github repository. To use one of those, download the release and move it to the `aie_platforms` repository and refer to the [Programming](#programming-steps) instructions on how to program the board.
 
 ## Prerequisites
 Vivado 2022.1
