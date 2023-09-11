@@ -9,7 +9,9 @@ We present an HSA-compatible AMD AI Engine platform implemented on an [AMD VCK50
 
 We provide prebuilt platforms configurations in the releases of this github repository. To use the prebuilt PDI, download the release and move it to the directory here `platform/vck5000/final_vck5000.pdi` and refer to the [Programming](#programming-steps) instructions on how to program the board.
 
-## Prerequisites
+## Building the Platform
+
+### Prerequisites
 Vivado 2022.1
 Vitis 2022.1
 VCK5000 board files\*: `vck5000_board_files_prod_si_20211201.zip`
@@ -18,13 +20,13 @@ VCK5000 board files\*: `vck5000_board_files_prod_si_20211201.zip`
 
 The pdi is loaded to the card over JTAG, the USB-JTAG cable must be connected to the micro-USB input on the VCK5000 card and a programming machine (this can be the x86 host). The Xilinx Cable drivers must be [installed](https://docs.xilinx.com/r/en-US/ug973-vivado-release-notes-install-license/Installing-Cable-Drivers) on the programming machine. 
 
-## Build steps
+### Build steps
 To build the .pdi of this design that can be loaded to the card, simply call:
 ```
 make all
 ```
 
-## Programming steps
+## Programming the VCK5000 Device
 Once run the top-level make completes, you should have generated `aie_platform/final_vck5000.pdi` containing the VCK5000 platform. The pdi can be loaded to the card by calling:
 ```
 cd aie_platform
@@ -33,7 +35,7 @@ make program_vck5000
 After programming the host should undergo a **warm reboot**.
 NOTE: the machine hosting the VCK5000 card will most likely crash after programming the card. This is because the PCIe link is lost during reconfiguration and the host may report an error. This is normal, and the card will be reenumerated on the PCIe bus after a **warm reboot**.
 
-## Verification
+### Verifying the Device Programming
 After a warm reboot, you can verify that the card has been programmed properly with the VCK5000 AIR platfrorm by executing this command:
 ```
 sudo lspci -vd 10ee:
@@ -52,7 +54,7 @@ The output should match the following (perhaps with a different bus ID):
         Capabilities: [1f0] Virtual Channel
 ```
 
-## Driver
+### Loading the Driver
 After programming the card, rebooting the host, and verifying the the card has been programmed properly, the [AIR PCIe driver](../../driver) must be loaded to communicate with the card.
 
 -----
