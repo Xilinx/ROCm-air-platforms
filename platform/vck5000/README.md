@@ -53,7 +53,7 @@ The output should match the following (perhaps with a different bus ID):
 ```
 
 ## Driver
-After programming the card, rebooting the host, and verifying the the card has been programmed properly, the [AIR PCIe driver](https://github.com/Xilinx/mlir-air/tree/main/driver) must be loaded to communicate with the card.
+After programming the card, rebooting the host, and verifying the the card has been programmed properly, the [AIR PCIe driver](../../driver) must be loaded to communicate with the card.
 
 -----
 
