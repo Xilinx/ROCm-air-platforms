@@ -57,7 +57,7 @@ To build the .pdi of this design that can be loaded to the card, simply call:
 ```
 make all
 ```
-Once the platform generation is complete, refer to the steps on how to [program the VCK5000].(#Programming-the-VCK5000-Device)
+Once the platform generation is complete, refer to the steps on how to [program the VCK5000](#Programming-the-VCK5000-Device).
 
 -----
 
