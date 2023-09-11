@@ -54,7 +54,7 @@ A: This is strictly a proof of concept.
 
 **Q: Tell me more about what is being accelerated?**
 
-A: **examples/weather_stencil:** Real-world climate and weather simulations involve the utilization of complex compound stencil kernels, which are composed of a combination of different stencils. Horizontal diffusion is one such important compound stencil found in many regional global climate and weather prediction models. The horizontal diffusion kernel is mapped across three AI Engine tiles. We carefully hand-tune the code to overlap memory operations with arithmetic operations, to improve performance. We use the AIE data forwarding interfaces to forward the results from the first AIE core (used for Laplacian calculation) to the subsequent AIE cores (used for flux calculation). This approach allows for the concurrent execution of multiple stencil calculations, which can increase the overall performance and throughput of the hdiff design.  The performance of the hdiff implementation can be maximized by scaling it out across as many AIE cores as possible while avoiding data starvation. We develop a bundle or B-block-based design. A B-block is a cluster of AIE cores connected to the same shimDMA input/output channel. In our design, we choose a B-Block to consist of 12-AI Engine tiles, of which we utilize four to consume a total of 48 AI Engine tiles. 
+A: **[examples/sparta-weather-stencil](examples/sparta-weather-stencil):** Real-world climate and weather simulations involve the utilization of complex compound stencil kernels, which are composed of a combination of different stencils. Horizontal diffusion is one such important compound stencil found in many regional global climate and weather prediction models. The horizontal diffusion kernel is mapped across three AI Engine tiles. We carefully hand-tune the code to overlap memory operations with arithmetic operations, to improve performance. We use the AIE data forwarding interfaces to forward the results from the first AIE core (used for Laplacian calculation) to the subsequent AIE cores (used for flux calculation). This approach allows for the concurrent execution of multiple stencil calculations, which can increase the overall performance and throughput of the hdiff design.  The performance of the hdiff implementation can be maximized by scaling it out across as many AIE cores as possible while avoiding data starvation. We develop a bundle or B-block-based design. A B-block is a cluster of AIE cores connected to the same shimDMA input/output channel. In our design, we choose a B-Block to consist of 12-AI Engine tiles, of which we utilize four to consume a total of 48 AI Engine tiles. 
 
 **Q: Can I use this release to accelerate my own application on AMD AI Engines?**
 
@@ -62,7 +62,7 @@ A: No.  This release is tied to a single pre-developed application kernel.
 
 **Q: How was the accelerator developed?**
 
-A: We leverage the [MLIR[(https://mlir.llvm.org) compiler infrastructure in our development process for this example design. Please refer to the [SPARTA](https://arxiv.org/pdf/2303.03509.pdf) paper for details. 
+A: We leverage the [MLIR](https://mlir.llvm.org) compiler infrastructure in our development process for this example design. Please refer to the [SPARTA](https://arxiv.org/pdf/2303.03509.pdf) paper for details. 
 
 **Q: I am interested in this work, and would like to contribute?**
 
