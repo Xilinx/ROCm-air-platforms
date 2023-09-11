@@ -1,6 +1,6 @@
 # AMD AIR Firmware
 
-The ARM processor acts as an HSA AQL packet processor that manages AIE configurations and affects runtime DMA transfers from external memory into the AIE array. In this directory, we provide the firmware which runs on the ARM to perform these operations. Note, most users will not need to touch this as the provided platform configuration contains the default firmware.
+The ARM processor acts as an HSA AQL packet processor that manages AIE configurations and affects runtime DMA transfers from external memory into the AIE array. In this directory, we provide the firmware which runs on the ARM to perform these operations. Note, most users will not need to touch this as the provided platform configuration contains the default firmware. If a user has a need to reload the firmware on the card, a copy of the compiled firmware binary is provided in the releases of this github repository. 
 
 ## Compiling
 
