@@ -25,7 +25,7 @@ make all
 ```
 
 ## Programming steps
-Once run the top-level make completes, you should have generated aie_platform/final_vck5000.pdi containing the VCK5000 platform. The pdi can be loaded to the card by calling:
+Once run the top-level make completes, you should have generated `aie_platform/final_vck5000.pdi` containing the VCK5000 platform. The pdi can be loaded to the card by calling:
 ```
 cd aie_platform
 make program_vck5000
