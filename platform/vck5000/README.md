@@ -10,7 +10,7 @@ We present an HSA-compatible AMD AI Engine platform implemented on an [AMD VCK50
 We provide prebuilt platforms configurations in the releases of this github repository. To use the prebuilt PDI, download the release and move it to the directory here `platform/vck5000/aie_platform/final_vck5000.pdi` and refer to the [Programming](#Programming-the-VCK5000-Device) instructions on how to program the board.
 
 ## Programming the VCK5000 Device
-Once run the top-level make completes, you should have generated `platform/vck5000/aie_platform/final_vck5000.pdi` containing the VCK5000 platform. The pdi can be loaded to the card by calling:
+Using the [Prebuilt Platform Design](#Using-a-Prebuilt-Platform-Design) or [Building the Platform Design from Source](##Building-the-Platform-Design-from-Source) will generate a platform configuration in `platform/vck5000/aie_platform/final_vck5000.pdi` containing the VCK5000 platform. The pdi can be loaded to the card by calling:
 ```
 cd aie_platform
 make program_vck5000
