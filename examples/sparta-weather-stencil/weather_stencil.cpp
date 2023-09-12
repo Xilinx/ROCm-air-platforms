@@ -313,16 +313,16 @@ int main(int argc, char *argv[]) {
   hsa_iterate_agents(&IterateAgents, reinterpret_cast<void*>(&agents));
 
   // Iterating over memory pools to initialize our allocator
-  hsa_amd_agent_iterate_memory_pools(agents[0],
+  hsa_amd_agent_iterate_memory_pools(agents.front(),
                                      IterateMemPool,
                                      reinterpret_cast<void*>(&global_mem_pool));
 
   // Getting the size of queue the agent supports
-  hsa_agent_get_info(agents[0], HSA_AGENT_INFO_QUEUE_MAX_SIZE, &aie_max_queue_size);
+  hsa_agent_get_info(agents.front(), HSA_AGENT_INFO_QUEUE_MAX_SIZE, &aie_max_queue_size);
 
   // Creating a queue
   hsa_queue_t *q = NULL;
-  auto queue_create_status = hsa_queue_create(agents[0], aie_max_queue_size,
+  auto queue_create_status = hsa_queue_create(agents.front(), aie_max_queue_size,
                               HSA_QUEUE_TYPE_SINGLE, nullptr, nullptr, 0,
                               0, &q);
 
@@ -336,16 +336,16 @@ int main(int argc, char *argv[]) {
   queues.push_back(q);
   if(queues.size() == 0) {
     std::cerr << "No queues were sucesfully created!" << std::endl;
-    hsa_queue_destroy(queues[0]);
+    hsa_queue_destroy(queues.front());
     hsa_shut_down();
     return -1;
   }
 
   // Configuring the device
-  auto airbin_ret = air_load_airbin(&agents[0], queues[0], "sparta-1DU.elf", starting_col);
+  auto airbin_ret = air_load_airbin(&agents.front(), queues.front(), "sparta-1DU.elf", starting_col);
   if (airbin_ret != HSA_STATUS_SUCCESS) {
     std::cerr << "Loading airbin failed: " << airbin_ret << std::endl;
-    hsa_queue_destroy(queues[0]);
+    hsa_queue_destroy(queues.front());
     hsa_shut_down();
     return -1;
   }
@@ -389,117 +389,117 @@ int main(int argc, char *argv[]) {
   // Each packet completion will decrement the signal.
   // Once it reaches zero we will know that all DMAs are complete.
   hsa_signal_t dma_signal;
-  hsa_amd_signal_create_on_agent(8, 0, nullptr, &agents[0], 0, &dma_signal);
+  hsa_amd_signal_create_on_agent(8, 0, nullptr, &agents.front(), 0, &dma_signal);
 
   //////////////////////////////////////// B Block 0
   //
   // send the data
   //
-  uint64_t wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  uint64_t packet_id = wr_idx % queues[0]->size;
+  uint64_t wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
+  uint64_t packet_id = wr_idx % queues.front()->size;
   hsa_agent_dispatch_packet_t pkt;
   air_packet_nd_memcpy(&pkt, 0, starting_col, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_0),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt;
 
   //
   // read the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  packet_id = wr_idx % queues[0]->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
+  packet_id = wr_idx % queues.front()->size;
   hsa_agent_dispatch_packet_t pkt2;
   air_packet_nd_memcpy(&pkt2, 0, starting_col, 0, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_0),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt2.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt2;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt2;
 
   //////////////////////////////////////// B Block 1
   //
   // send the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  packet_id = wr_idx % queues[0]->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
+  packet_id = wr_idx % queues.front()->size;
   hsa_agent_dispatch_packet_t pkt3;
   air_packet_nd_memcpy(&pkt3, 0, starting_col, 1, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_1),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt3.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt3;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt3;
 
   //
   // read the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  packet_id = wr_idx % queues[0]->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
+  packet_id = wr_idx % queues.front()->size;
   hsa_agent_dispatch_packet_t pkt4;
   air_packet_nd_memcpy(&pkt4, 0, starting_col, 0, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_1),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt4.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt4;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt4;
 
   //////////////////////////////////////// B Block 2
   //
   // send the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  packet_id = wr_idx % queues[0]->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
+  packet_id = wr_idx % queues.front()->size;
   hsa_agent_dispatch_packet_t pkt5;
   air_packet_nd_memcpy(&pkt5, 0, starting_col+1, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_2),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt5.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt5;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt5;
 
   //
   // read the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  packet_id = wr_idx % queues[0]->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
+  packet_id = wr_idx % queues.front()->size;
   hsa_agent_dispatch_packet_t pkt6;
   air_packet_nd_memcpy(&pkt6, 0, starting_col+1, 0, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_2),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt6.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt6;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt6;
 
   //////////////////////////////////////// B Block 3
   //
   // send the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  packet_id = wr_idx % queues[0]->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
+  packet_id = wr_idx % queues.front()->size;
   hsa_agent_dispatch_packet_t pkt7;
   air_packet_nd_memcpy(&pkt7, 0, starting_col+1, 1, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_3),
                        DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt7.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt7;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt7;
 
   //
   // read the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues[0], 1);
-  packet_id = wr_idx % queues[0]->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
+  packet_id = wr_idx % queues.front()->size;
   hsa_agent_dispatch_packet_t pkt8;
   air_packet_nd_memcpy(&pkt8, 0, starting_col+1, 0, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_3),
                        DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt8.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues[0]->base_address)[packet_id] = pkt8;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt8;
 
   // Ringing the doorbell to notify the command processor of the packet
-  hsa_signal_store_screlease(queues[0]->doorbell_signal, wr_idx);
+  hsa_signal_store_screlease(queues.front()->doorbell_signal, wr_idx);
 
   // wait for packet completion
   while (hsa_signal_wait_scacquire(dma_signal,
@@ -538,7 +538,7 @@ int main(int argc, char *argv[]) {
   }
 
   // destroying the queue
-  hsa_queue_destroy(queues[0]);
+  hsa_queue_destroy(queues.front());
   hsa_amd_memory_pool_free((void *)ddr_ptr_in_0);
   hsa_amd_memory_pool_free((void *)ddr_ptr_in_1);
   hsa_amd_memory_pool_free((void *)ddr_ptr_in_2);
