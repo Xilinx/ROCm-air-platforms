@@ -110,11 +110,8 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   struct stat elf_stat;
 
   // The starting colums of the DUs on the VCK5000 are: 2, 10, 18, 26, 34, and 42
-  std::vector<uint8_t> du_start_columns = {2, 10, 18, 26, 34, 42};
-  if (std::find(du_start_columns.begin(), 
-                du_start_columns.end(), column) == du_start_columns.end()) {
+  if (std::set {2, 10, 18, 26, 34, 42}.contains(column)) 
     return HSA_STATUS_ERROR_INVALID_ARGUMENT;
-  }
 
   // open the AIRBIN file
   elf_fd = open(filename, O_RDONLY);
