@@ -112,7 +112,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   std::vector<uint8_t> du_start_columns(6) = {2, 10, 18, 26, 34, 42};
   if (std::find(du_start_columns.begin(), 
                 du_start_columns.end(), column) == du_start_columns.end()) {
-    return HSA_STATUS_ERROR;
+    return HSA_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
   // open the AIRBIN file
