@@ -371,19 +371,19 @@ int main(int argc, char *argv[]) {
   hsa_amd_memory_pool_allocate(global_mem_pool, DMA_COUNT_OUT * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_3);
 
   // initialize the external buffers
-  for (int i = 0; i < DMA_COUNT_IN; i++) {
-    *(ddr_ptr_in_0 + i) = i; // input
-    *(ddr_ptr_in_1 + i) = i; // input
-    *(ddr_ptr_in_2 + i) = i; // input
-    *(ddr_ptr_in_3 + i) = i; // input
-  }
-
-  for (int i = 0; i < DMA_COUNT_OUT; i++) {
-    *(ddr_ptr_out_0 + i) = 0; // input
-    *(ddr_ptr_out_1 + i) = 0; // input
-    *(ddr_ptr_out_2 + i) = 0; // input
-    *(ddr_ptr_out_3 + i) = 0; // input
-  }
+  std::vector<int> in_v(DMA_COUNT_IN);
+  std::iota(std::begin(in_v), std::end(in_v), 0); // Fill with 0, 1, ..., DMA_COUNT_IN-1.
+  std::memcpy(ddr_ptr_in_0, in_v.data(), DMA_COUNT_IN);
+  std::memcpy(ddr_ptr_in_1, in_v.data(), DMA_COUNT_IN);
+  std::memcpy(ddr_ptr_in_2, in_v.data(), DMA_COUNT_IN);
+  std::memcpy(ddr_ptr_in_3, in_v.data(), DMA_COUNT_IN);
+  
+  std::vector<int> out_v(DMA_COUNT_OUT);
+  std::fill(std::begin(out_v), std::end(out_v), 0); // Fill with 0
+  std::memcpy(ddr_ptr_out_0, out_v.data(), DMA_COUNT_OUT);
+  std::memcpy(ddr_ptr_out_1, out_v.data(), DMA_COUNT_OUT);
+  std::memcpy(ddr_ptr_out_2, out_v.data(), DMA_COUNT_OUT);
+  std::memcpy(ddr_ptr_out_3, out_v.data(), DMA_COUNT_OUT);
 
   // Creating one signal for all DMA packets. 
   // Each packet completion will decrement the signal.
