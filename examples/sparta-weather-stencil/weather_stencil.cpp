@@ -380,8 +380,9 @@ int main(int argc, char *argv[]) {
     *(ddr_ptr_out_3 + i) = 0; // input
   }
 
-  // Creating one signal for each packet. Once it reaches zero we will know that
-  // all DMAs are complete
+  // Creating one signal for all DMA packets. 
+  // Each packet completion will decrement the signal.
+  // Once it reaches zero we will know that all DMAs are complete.
   hsa_signal_t dma_signal;
   hsa_amd_signal_create_on_agent(8, 0, nullptr, &agents[0], 0, &dma_signal);
 
