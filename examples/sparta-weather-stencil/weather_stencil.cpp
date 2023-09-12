@@ -313,7 +313,7 @@ int main(int argc, char *argv[]) {
   hsa_iterate_agents(&IterateAgents, reinterpret_cast<void*>(&agents));
 
   // Iterating over memory pools to initialize our allocator
-  hsa_amd_agent_iterate_memory_pools(agents.front(),
+  hsa_amd_agent_iterate_memory_pools(agents[0],
                                      IterateMemPool,
                                      reinterpret_cast<void*>(&global_mem_pool));
 
