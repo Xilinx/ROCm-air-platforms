@@ -559,7 +559,5 @@ int main(int argc, char *argv[]) {
     return HSA_STATUS_ERROR;
   }
 
-  std::cout << "test done weather predicted = chocolate :D\n" << std::endl;
-
-  return 0;
+  return res;
 }
