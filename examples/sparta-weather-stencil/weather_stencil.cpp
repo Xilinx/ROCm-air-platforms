@@ -342,7 +342,7 @@ int main(int argc, char *argv[]) {
   }
 
   // Configuring the device
-  auto airbin_ret = air_load_airbin(&agents.front(), queues.front(), "sparta-1DU.elf", starting_col);
+  auto airbin_ret = air_load_airbin(agents.data(), queues.front(), "sparta-1DU.elf", starting_col);
   if (airbin_ret != HSA_STATUS_SUCCESS) {
     std::cerr << "Loading airbin failed: " << airbin_ret << std::endl;
     hsa_queue_destroy(queues.front());
@@ -389,7 +389,7 @@ int main(int argc, char *argv[]) {
   // Each packet completion will decrement the signal.
   // Once it reaches zero we will know that all DMAs are complete.
   hsa_signal_t dma_signal;
-  hsa_amd_signal_create_on_agent(8, 0, nullptr, &agents.front(), 0, &dma_signal);
+  hsa_amd_signal_create_on_agent(8, 0, nullptr, agents.data(), 0, &dma_signal);
 
   //////////////////////////////////////// B Block 0
   //
