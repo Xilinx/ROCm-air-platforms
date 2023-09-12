@@ -110,7 +110,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   struct stat elf_stat;
 
   // The starting colums of the DUs on the VCK5000 are: 2, 10, 18, 26, 34, and 42
-  std::vector<uint8_t> du_start_columns(6) = {2, 10, 18, 26, 34, 42};
+  std::vector<uint8_t> du_start_columns = {2, 10, 18, 26, 34, 42};
   if (std::find(du_start_columns.begin(), 
                 du_start_columns.end(), column) == du_start_columns.end()) {
     return HSA_STATUS_ERROR_INVALID_ARGUMENT;
@@ -328,6 +328,7 @@ int main(int argc, char *argv[]) {
 
   if(queue_create_status != HSA_STATUS_SUCCESS) {
     std::cerr << "hsa_queue_create failed" << std::endl;
+    hsa_shut_down();
     return -1;
   }
 
@@ -335,6 +336,8 @@ int main(int argc, char *argv[]) {
   queues.push_back(q);
   if(queues.size() == 0) {
     std::cerr << "No queues were sucesfully created!" << std::endl;
+    hsa_queue_destroy(queues[0]);
+    hsa_shut_down();
     return -1;
   }
 
@@ -342,6 +345,8 @@ int main(int argc, char *argv[]) {
   auto airbin_ret = air_load_airbin(&agents[0], queues[0], "sparta-1DU.elf", starting_col);
   if (airbin_ret != HSA_STATUS_SUCCESS) {
     std::cerr << "Loading airbin failed: " << airbin_ret << std::endl;
+    hsa_queue_destroy(queues[0]);
+    hsa_shut_down();
     return -1;
   }
 
