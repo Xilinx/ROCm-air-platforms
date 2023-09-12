@@ -7,6 +7,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <vector>
+#include <algorithm>
 #include <sys/stat.h>
 #include <gelf.h>
 
