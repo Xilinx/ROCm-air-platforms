@@ -4,10 +4,10 @@
 CC=clang
 
 LDFLAGS = -fuse-ld=lld -rdynamic \
-		-lstdc++ \
-		-lm \
-    		-Wl,-rpath,${ROCM_ROOT}/lib ${ROCM_ROOT}/lib/libhsa-runtime64.so.1.9.0 \
-    		${ELFUTILS_ROOT}/libelf.a \
+	-std=c++20 -lstdc++ \
+	-lm \
+	-Wl,-rpath,${ROCM_ROOT}/lib ${ROCM_ROOT}/lib/libhsa-runtime64.so.1.9.0 \
+	${ELFUTILS_ROOT}/libelf.a \
 
 CFLAGS += -I/${ROCM_ROOT}/include
 
@@ -30,4 +30,4 @@ endif
 
 
 clean::
-	rm -rf *.exe 
+	rm -rf *.exe
