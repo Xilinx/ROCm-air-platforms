@@ -44,11 +44,13 @@ After programming the card, rebooting the host, and verifying the the card has b
 ## Building the Platform Design from Source
 
 ### Prerequisites
-Vivado 2022.1
-Vitis 2022.1
-VCK5000 board files\*: `vck5000_board_files_prod_si_20211201.zip`
+ - Vivado 2022.1
+ - Vitis 2022.1
+ - VCK5000 board files\*: `vck5000_board_files_prod_si_20211201.zip`
 
 \* The board files can be downloaded from the [VCK5000 Early Access Site](https://www.xilinx.com/member/vck5000.html).  Note that the xsa build script (vivado/xilinx_vck5000_air_xsa.tcl) assumes the board files are stored in mlir-air/platforms/other-board-files/vck5000. Users can override this path by creating and setting an environment variable with the name `MLIR_AIR_OTHER_BOARD_FILE_DIR`.
+
+#### Note on programming the VCK5000 card:
 
 The pdi is loaded to the card over JTAG, the USB-JTAG cable must be connected to the micro-USB input on the VCK5000 card and a programming machine (this can be the x86 host). The Xilinx Cable drivers must be [installed](https://docs.xilinx.com/r/en-US/ug973-vivado-release-notes-install-license/Installing-Cable-Drivers) on the programming machine. 
 
