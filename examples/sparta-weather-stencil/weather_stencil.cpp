@@ -2,15 +2,15 @@
 // (c) 2023 SAFARI Research Group at ETH Zurich, Gagandeep Singh, D-ITET
 // SPDX-License-Identifier: MIT
 
+#include <algorithm>
 #include <cstring>
 #include <fcntl.h>
+#include <gelf.h>
 #include <iostream>
-#include <unistd.h>
-#include <vector>
-#include <algorithm>
 #include <numeric>
 #include <sys/stat.h>
-#include <gelf.h>
+#include <unistd.h>
+#include <vector>
 
 #include "hsa/hsa.h"
 #include "hsa/hsa_ext_amd.h"
