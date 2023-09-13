@@ -6,13 +6,13 @@ Both the experimental [rocm-5.6.x-air branch](https://github.com/RadeonOpenCompu
 
 ## Getting Started
 
-1. **Install the ROCm release:** Refer to the experimental [rocm-5.6.x-air branch](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air) instructions on how to install our experimental ROCm release.
+1. **Install the ROCm release:** Refer to the experimental [rocm-5.6.x-air branch](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air) instructions on how to install our experimental ROCm release. The build instructions for ROCr are found in the ROCr-Runtime/src/ directory's README.
    
-2. **Configure the board:** Refer to the [platform documentation](platform/vck5000) on how to load the platform on the VCK5000.
+3. **Configure the board:** Refer to the [platform documentation](platform/vck5000) on how to load the platform on the VCK5000.
    
-3. **Insert the driver:** Refer to the [driver documentation](driver) on how to compile and load the driver.
+4. **Insert the driver:** Refer to the [driver documentation](driver) on how to compile and load the driver.
    
-4. **Run the example:** Refer to the [weather stencil application](examples/sparta-weather-stencil) on how to compile and execute the application on the ROCm AIR platform.
+5. **Run the example:** Refer to the [weather stencil application](examples/sparta-weather-stencil) on how to compile and execute the application on the ROCm AIR platform.
 
 ## Examples
 
