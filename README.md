@@ -6,7 +6,7 @@ Both the experimental [rocm-5.6.x-air branch](https://github.com/RadeonOpenCompu
 
 ## Getting Started
 
-1. **Install the ROCm release:** Refer to the experimental [rocm-air branch](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air) instructions on how to install our experimental ROCm release.
+1. **Install the ROCm release:** Refer to the experimental [rocm-5.6.x-air branch](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air) instructions on how to install our experimental ROCm release.
    
 2. **Configure the board:** Refer to the [platform documentation](platform/vck5000) on how to load the platform on the VCK5000.
    
@@ -66,9 +66,11 @@ A: We leverage the [MLIR](https://mlir.llvm.org) compiler infrastructure in our 
 
 **Q: I am interested in this work, and would like to contribute?**
 
-A: Pull requests to this repository and the experimental ROCm runtime branch, [rocm-air](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air), are welcome. Please don't hesitate to interact with the repository through issues as well. 
+A: Pull requests to this repository and the experimental ROCm runtime branch, [rocm-5.6.x-air](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air), are welcome. Please don't hesitate to interact with the repository through issues as well. 
 
-This repository and the experimental [rocm-air](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air) branch are experimental prototypes of AMD research and not official AMD products. Both suites of software are provided as-is with no guarantees of support of AMD or AMD Research and Advanced Development.
+**Q: What is this release?**
+
+This repository and the experimental [rocm-5.6.x-air](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air) branch are experimental prototypes of AMD research and not official AMD products. Both suites of software are provided as-is with no guarantees of support of AMD or AMD Research and Advanced Development.
 
 **Q: What platforms does this release work on?**
 
