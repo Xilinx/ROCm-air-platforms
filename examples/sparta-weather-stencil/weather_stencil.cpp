@@ -291,6 +291,30 @@ hsa_status_t IterateMemPool(hsa_amd_memory_pool_t pool, void *data) {
   return status;
 }
 
+void print_weather(bool passed) {
+  if (passed) {
+    std::cout << "      ;   :   ;       " << std::endl; 
+    std::cout << "   .   \\_,!,_/   ,    " << std::endl; 
+    std::cout << "    `.,'     `.,'     " << std::endl; 
+    std::cout << "     /         \\      " << std::endl; 
+    std::cout << "~ -- :  PASS   : -- ~ " << std::endl; 
+    std::cout << "     \\         /      " << std::endl; 
+    std::cout << "    ,'`._   _.'`.     " << std::endl; 
+    std::cout << "   '   / `!` \\   `    " << std::endl; 
+    std::cout << "      ;   :   ;       " << std::endl; 
+  } else {
+    std::cout << "   __(                  ) " << std::endl;
+    std::cout << "  (_      FAIL      __))  " << std::endl;
+    std::cout << "    ((           __)      " << std::endl;
+    std::cout << "      (______)--'         " << std::endl;
+    std::cout << "      _/  /               " << std::endl;
+    std::cout << "     / __/                " << std::endl;
+    std::cout << "    / /                   " << std::endl;
+    std::cout << "   //                     " << std::endl;
+    std::cout << "  /'                      " << std::endl;
+  }
+}
+
 int main(int argc, char *argv[]) {
 
   // Starting in the first DU of the VCK5000
@@ -511,7 +535,6 @@ int main(int argc, char *argv[]) {
   hsa_signal_destroy(dma_signal);
 
   for (int i = 0; i < 512; i++) {
-
     if(ddr_ptr_out_0[i] != 514 + i) {
       std::cerr << "[ERROR] " << ddr_ptr_out_0[i] << " != " << 514 + i << std::endl;
       errors++;
@@ -531,11 +554,6 @@ int main(int argc, char *argv[]) {
       std::cerr << "[ERROR] ddr_ptr_out_0[" << i << "] (" << ddr_ptr_out_0[i] << ")  != ddr_ptr_out_3[" << i << "] (" << ddr_ptr_out_3[i] << ")" << std::endl;
       errors++;
     }
-
-    std::cout << "ddr_ptr_out_0[" << i << "] = " << ddr_ptr_out_0[i] << std::endl;
-    std::cout << "ddr_ptr_out_1[" << i << "] = " << ddr_ptr_out_1[i] << std::endl;
-    std::cout << "ddr_ptr_out_2[" << i << "] = " << ddr_ptr_out_2[i] << std::endl;
-    std::cout << "ddr_ptr_out_3[" << i << "] = " << ddr_ptr_out_3[i] << std::endl;
   }
 
   // destroying the queue
@@ -552,10 +570,10 @@ int main(int argc, char *argv[]) {
   // Check for errors
   int res = 0;
   if (!errors) {
-    std::cout << "PASS!\n" << std::endl;
+    print_weather(true);
     res = 0;
   } else {
-    std::cout << "Fail!\n" << std::endl;
+    print_weather(false);
     res = -1;
   }
 
