@@ -214,22 +214,22 @@ aie_libxaie_ctx_t *_xaie;
 /*
   read 32 bit value from specified address
 */
-static inline u32 in32(u64 Addr) {
-  u32 Value = IO_READ32(Addr);
+static inline uint32_t in32(uint64_t Addr) {
+  uint32_t Value = IO_READ32(Addr);
   return Value;
 }
 
 /*
   write 32 bit value to specified address
 */
-static inline void out32(u64 Addr, u32 Value) {
+static inline void out32(uint64_t Addr, uint32_t Value) {
   IO_WRITE32(Addr, Value);
 }
 
-u32 maskpoll32(u64 Addr, u32 Mask, u32 Value, u32 TimeOut) {
-  u32 Ret = 1;
+uint32_t maskpoll32(uint64_t Addr, uint32_t Mask, uint32_t Value, uint32_t TimeOut) {
+  uint32_t Ret = 1;
 
-  u32 Count = 10 + TimeOut;
+  uint32_t Count = 10 + TimeOut;
 
   while (Count > 0U) {
     if ((in32(Addr) & Mask) == Value) {
@@ -245,14 +245,14 @@ u32 maskpoll32(u64 Addr, u32 Mask, u32 Value, u32 TimeOut) {
 /*
   Calculate the address of an AIE tile
 */
-u64 getTileAddr(u16 ColIdx, u16 RowIdx) {
+uint64_t getTileAddr(uint16_t ColIdx, uint16_t RowIdx) {
 #ifdef ARM_CONTROLLER
-  u64 my_ta = (u64)(AIE_BASE | (ColIdx << AIE_COLUMN_SHIFT) |
+  uint64_t my_ta = (uint64_t)(AIE_BASE | (ColIdx << AIE_COLUMN_SHIFT) |
                     (RowIdx << AIE_ROW_SHIFT));
   return my_ta;
 #else
-  u64 TileAddr = 0;
-  u64 ArrOffset = XAIE_ADDR_ARRAY_OFF;
+  uint64_t TileAddr = 0;
+  uint64_t ArrOffset = XAIE_ADDR_ARRAY_OFF;
 
 #ifdef XAIE_BASE_ARRAY_ADDR_OFFSET
   ArrOffset = XAIE_BASE_ARRAY_ADDR_OFFSET;
@@ -266,7 +266,7 @@ u64 getTileAddr(u16 ColIdx, u16 RowIdx) {
    * | Array offset | Column | Row | Tile addr  |
    * --------------------------------------------
    */
-  TileAddr = (u64)((ArrOffset << XAIEGBL_TILE_ADDR_ARR_SHIFT) |
+  TileAddr = (uint64_t)((ArrOffset << XAIEGBL_TILE_ADDR_ARR_SHIFT) |
                    (ColIdx << XAIEGBL_TILE_ADDR_COL_SHIFT) |
                    (RowIdx << XAIEGBL_TILE_ADDR_ROW_SHIFT));
 
@@ -363,19 +363,19 @@ int mlir_aie_reinit_device(aie_libxaie_ctx_t *ctx) {
 }
 
 void mlir_aie_print_dma_status(int col, int row) {
-  u64 tileAddr = getTileAddr(col, row);
+  uint64_t tileAddr = getTileAddr(col, row);
 
-  u32 dma_s2mm0_control = in32(tileAddr + 0x0001DE00);
-  u32 dma_s2mm1_control = in32(tileAddr + 0x0001DE08);
-  u32 dma_mm2s0_control = in32(tileAddr + 0x0001DE10);
-  u32 dma_mm2s1_control = in32(tileAddr + 0x0001DE18);
-  u32 dma_s2mm_status = in32(tileAddr + 0x0001DF00);
-  u32 dma_mm2s_status = in32(tileAddr + 0x0001DF10);
+  uint32_t dma_s2mm0_control = in32(tileAddr + 0x0001DE00);
+  uint32_t dma_s2mm1_control = in32(tileAddr + 0x0001DE08);
+  uint32_t dma_mm2s0_control = in32(tileAddr + 0x0001DE10);
+  uint32_t dma_mm2s1_control = in32(tileAddr + 0x0001DE18);
+  uint32_t dma_s2mm_status = in32(tileAddr + 0x0001DF00);
+  uint32_t dma_mm2s_status = in32(tileAddr + 0x0001DF10);
 
-  u32 s2mm_ch0_running = dma_s2mm_status & 0x3;
-  u32 s2mm_ch1_running = (dma_s2mm_status >> 2) & 0x3;
-  u32 mm2s_ch0_running = dma_mm2s_status & 0x3;
-  u32 mm2s_ch1_running = (dma_mm2s_status >> 2) & 0x3;
+  uint32_t s2mm_ch0_running = dma_s2mm_status & 0x3;
+  uint32_t s2mm_ch1_running = (dma_s2mm_status >> 2) & 0x3;
+  uint32_t mm2s_ch0_running = dma_mm2s_status & 0x3;
+  uint32_t mm2s_ch1_running = (dma_mm2s_status >> 2) & 0x3;
 
   xil_printf("DMA [%d, %d] tile addr=0x%lx\r\n", col, row, tileAddr);
   xil_printf("  mm2s (0=%s 1=%s) status=%08X ctrl0=%02X ctrl1=%02X\r\n",
@@ -389,14 +389,14 @@ void mlir_aie_print_dma_status(int col, int row) {
 
   xil_printf("Descriptors:\r\n");
   for (uint32_t bd = 0; bd < NUM_BD; bd++) {
-    u32 dma_bd_addr_a = in32(tileAddr + REG_AIE_DMA_BD_ADDR_A(bd));
-    u32 dma_bd_control = in32(tileAddr + REG_AIE_DMA_BD_CTL(bd));
+    uint32_t dma_bd_addr_a = in32(tileAddr + REG_AIE_DMA_BD_ADDR_A(bd));
+    uint32_t dma_bd_control = in32(tileAddr + REG_AIE_DMA_BD_CTL(bd));
     if (dma_bd_control & AIE_DMA_BD_CTL_VALID) {
       xil_printf("BD %d valid\n\r", bd);
-      u32 current_s2mm_ch0 = (dma_s2mm_status >> 16) & 0xf;
-      u32 current_s2mm_ch1 = (dma_s2mm_status >> 20) & 0xf;
-      u32 current_mm2s_ch0 = (dma_mm2s_status >> 16) & 0xf;
-      u32 current_mm2s_ch1 = (dma_mm2s_status >> 20) & 0xf;
+      uint32_t current_s2mm_ch0 = (dma_s2mm_status >> 16) & 0xf;
+      uint32_t current_s2mm_ch1 = (dma_s2mm_status >> 20) & 0xf;
+      uint32_t current_mm2s_ch0 = (dma_mm2s_status >> 16) & 0xf;
+      uint32_t current_mm2s_ch1 = (dma_mm2s_status >> 20) & 0xf;
 
       if (s2mm_ch0_running && bd == current_s2mm_ch0) {
         xil_printf(" * Current BD for s2mm channel 0\n\r");
@@ -412,7 +412,7 @@ void mlir_aie_print_dma_status(int col, int row) {
       }
 
       if (dma_bd_control & AIE_DMA_BD_CTL_ENA_PKT) {
-        u32 dma_packet = in32(tileAddr + REG_AIE_DMA_BD_PKT(bd));
+        uint32_t dma_packet = in32(tileAddr + REG_AIE_DMA_BD_PKT(bd));
         xil_printf("   Packet mode: %02X\n\r", dma_packet & AIE_DMA_BD_PKT_ID);
       }
       int words_to_transfer = 1 + (dma_bd_control & AIE_DMA_BD_CTL_LEN);
@@ -422,22 +422,22 @@ void mlir_aie_print_dma_status(int col, int row) {
 
       xil_printf("   ");
       for (int w = 0; w < 7; w++) {
-        u32 tmpd = in32(tileAddr + (base_address << 2) + (w * 4));
+        uint32_t tmpd = in32(tileAddr + (base_address << 2) + (w * 4));
         xil_printf("%08X ", tmpd);
       }
       xil_printf("\n\r");
       if (dma_bd_addr_a & AIE_DMA_BD_ADDR_ENA_ACQ) {
-        u32 lock_id = (dma_bd_addr_a >> 22) & 0xf;
+        uint32_t lock_id = (dma_bd_addr_a >> 22) & 0xf;
         xil_printf("   Acquires lock %d ", lock_id);
         if (dma_bd_addr_a & 0x10000)
           xil_printf("with value %d ", (dma_bd_addr_a >> 17) & 0x1);
 
         xil_printf("currently ");
-        u32 locks = in32(tileAddr + 0x0001EF00);
-        u32 two_bits = (locks >> (lock_id * 2)) & 0x3;
+        uint32_t locks = in32(tileAddr + 0x0001EF00);
+        uint32_t two_bits = (locks >> (lock_id * 2)) & 0x3;
         if (two_bits) {
-          u32 acquired = two_bits & 0x1;
-          u32 value = two_bits & 0x2;
+          uint32_t acquired = two_bits & 0x1;
+          uint32_t value = two_bits & 0x2;
           if (acquired)
             xil_printf("Acquired ");
           xil_printf(value ? "1" : "0");
@@ -447,11 +447,11 @@ void mlir_aie_print_dma_status(int col, int row) {
       }
       if (dma_bd_control & 0x30000000) { // FIFO MODE
         int FIFO = (dma_bd_control >> 28) & 0x3;
-        u32 dma_fifo_counter = in32(tileAddr + 0x0001DF20);
+        uint32_t dma_fifo_counter = in32(tileAddr + 0x0001DF20);
         xil_printf("   Using FIFO Cnt%d : %08X\n\r", FIFO, dma_fifo_counter);
       }
-      u32 nextBd = ((dma_bd_control >> 13) & 0xF);
-      u32 useNextBd = ((dma_bd_control >> 17) & 0x1);
+      uint32_t nextBd = ((dma_bd_control >> 13) & 0xF);
+      uint32_t useNextBd = ((dma_bd_control >> 17) & 0x1);
       xil_printf("   Next BD: %d %s\r\n", nextBd,
                  (useNextBd == 0) ? "(unused)" : "(used)");
     }
@@ -490,17 +490,17 @@ void mlir_aie_print_shimdma_status(uint16_t col) {
 
   xil_printf("Descriptors:\r\n");
   for (int bd = 0; bd < 16; bd++) {
-    u64 bd_addr_a = in32(tileAddr + REG_SHIM_DMA_BD_ADDR(bd));
-    u32 dma_bd_buffer_length = in32(tileAddr + REG_SHIM_DMA_BD_BUF_LEN(bd));
-    u32 dma_bd_control = in32(tileAddr + REG_SHIM_DMA_BD_CTRL(bd));
+    uint64_t bd_addr_a = in32(tileAddr + REG_SHIM_DMA_BD_ADDR(bd));
+    uint32_t dma_bd_buffer_length = in32(tileAddr + REG_SHIM_DMA_BD_BUF_LEN(bd));
+    uint32_t dma_bd_control = in32(tileAddr + REG_SHIM_DMA_BD_CTRL(bd));
 
     xil_printf("[%02d] ", bd);
     if (dma_bd_control & SHIM_DMA_BD_CTRL_VALID)
       xil_printf("valid ");
 
     int words_to_transfer = dma_bd_buffer_length;
-    u64 base_address =
-        (u64)bd_addr_a + ((u64)((dma_bd_control >> 16) & 0xFFFF) << 32);
+    uint64_t base_address =
+        (uint64_t)bd_addr_a + ((uint64_t)((dma_bd_control >> 16) & 0xFFFF) << 32);
     xil_printf("   Transferring %d 32 bit words to/from %08lX\n\r",
                words_to_transfer, base_address);
 
@@ -525,9 +525,9 @@ void mlir_aie_print_shimdma_status(uint16_t col) {
 /// Print the status of a core represented by the given tile, at the given
 /// coordinates.
 void mlir_aie_print_tile_status(int col, int row) {
-  u32 trace_status;
-  u32 status, coreTimerLow, PC, LR, SP, locks, R0, R4;
-  u64 tileAddr = getTileAddr(col, row);
+  uint32_t trace_status;
+  uint32_t status, coreTimerLow, PC, LR, SP, locks, R0, R4;
+  uint64_t tileAddr = getTileAddr(col, row);
 
   status = in32(tileAddr + REG_AIE_CORE_STATUS);
   coreTimerLow = in32(tileAddr + 0x0340F8);
@@ -547,11 +547,11 @@ void mlir_aie_print_tile_status(int col, int row) {
   xil_printf("Core [%d, %d] trace status is %08X\n\r", col, row, trace_status);
 
   for (int lock = 0; lock < 16; lock++) {
-    u32 two_bits = (locks >> (lock * 2)) & 0x3;
+    uint32_t two_bits = (locks >> (lock * 2)) & 0x3;
     if (two_bits) {
       xil_printf("Lock %d: ", lock);
-      u32 acquired = two_bits & 0x1;
-      u32 value = two_bits & 0x2;
+      uint32_t acquired = two_bits & 0x1;
+      uint32_t value = two_bits & 0x2;
       if (acquired)
         xil_printf("Acquired ");
       xil_printf(value ? "1" : "0");
@@ -738,7 +738,7 @@ int xaie_shim_dma_push_bd(uint64_t TileAddr, int direction, int channel,
   // change length in bytes to 32 bit words
   out32(TileAddr + REG_SHIM_DMA_BD_BUF_LEN(bd), len >> 2);
 
-  u32 control = (HIGH_ADDR(addr) << 16) | SHIM_DMA_BD_CTRL_VALID;
+  uint32_t control = (HIGH_ADDR(addr) << 16) | SHIM_DMA_BD_CTRL_VALID;
   out32(TileAddr + REG_SHIM_DMA_BD_CTRL(bd), control);
   out32(TileAddr + REG_SHIM_DMA_BD_AXI_CFG(bd),
         0x410); // Burst len [10:9] = 2 (16)
@@ -780,9 +780,9 @@ int xaie_shim_dma_push_bd(uint64_t TileAddr, int direction, int channel,
   return 1;
 }
 
-int xaie_lock_release(u16 col, u16 row, u32 lock_id, u32 val) {
-  u64 Addr = getTileAddr(col, row);
-  u64 LockOfst = 0x0001E020;
+int xaie_lock_release(uint16_t col, uint16_t row, uint32_t lock_id, uint32_t val) {
+  uint64_t Addr = getTileAddr(col, row);
+  uint64_t LockOfst = 0x0001E020;
   if (row != 0)
     LockOfst = 0x0001E020 + 0x10 * (val & 0x1);
   else {
@@ -801,9 +801,9 @@ int xaie_lock_release(u16 col, u16 row, u32 lock_id, u32 val) {
   return 1;
 }
 
-int xaie_lock_acquire_nb(u16 col, u16 row, u32 lock_id, u32 val) {
-  u64 Addr = getTileAddr(col, row);
-  u64 LockOfst = 0x0001E060;
+int xaie_lock_acquire_nb(uint16_t col, uint16_t row, uint32_t lock_id, uint32_t val) {
+  uint64_t Addr = getTileAddr(col, row);
+  uint64_t LockOfst = 0x0001E060;
   if (row != 0)
     LockOfst = 0x0001E060 + 0x10 * (val & 0x1);
   else {
@@ -817,8 +817,8 @@ int xaie_lock_acquire_nb(u16 col, u16 row, u32 lock_id, u32 val) {
       break;
     }
   }
-  u8 lock_ret = 0;
-  u32 loop = 0;
+  uint8_t lock_ret = 0;
+  uint32_t loop = 0;
   while ((!lock_ret) && (loop < 512)) {
     lock_ret = maskpoll32(Addr + LockOfst + 0x80 * lock_id, 0x1, 0x1, 100);
     // lock_ret = XAieTile_LockAcquire(tile, lock_id, val, 10000);
@@ -979,7 +979,7 @@ const uint64_t shmem_base = 0x020100000000ULL;
   Put a tile into reset
 */
 void aie_tile_reset(int col, int row) {
-  u64 tileAddr = getTileAddr(col, row);
+  uint64_t tileAddr = getTileAddr(col, row);
   out32(tileAddr + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_RESET);
 }
 
@@ -987,7 +987,7 @@ void aie_tile_reset(int col, int row) {
   Take a tile out of reset
 */
 void aie_tile_enable(int col, int row) {
-  u64 tileAddr = getTileAddr(col, row);
+  uint64_t tileAddr = getTileAddr(col, row);
   out32(tileAddr + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_ENABLE);
 }
 
@@ -1035,12 +1035,12 @@ void handle_packet_segment_initialize(hsa_agent_dispatch_packet_t *pkt) {
 
   // Address mode here is absolute range
   if (((pkt->arg[0] >> 48) & 0xf) == AIR_ADDRESS_ABSOLUTE_RANGE) {
-    u16 start_row = (pkt->arg[0] >> 16) & 0xff;
-    u16 num_rows = (pkt->arg[0] >> 24) & 0xff;
-    u16 start_col = (pkt->arg[0] >> 32) & 0xff;
-    u16 num_cols = (pkt->arg[0] >> 40) & 0xff;
+    uint16_t start_row = (pkt->arg[0] >> 16) & 0xff;
+    uint16_t num_rows = (pkt->arg[0] >> 24) & 0xff;
+    uint16_t start_col = (pkt->arg[0] >> 32) & 0xff;
+    uint16_t num_cols = (pkt->arg[0] >> 40) & 0xff;
 
-    u16 segment_id = pkt->arg[1] & 0xffff;
+    uint16_t segment_id = pkt->arg[1] & 0xffff;
 
     // TODO more checks on segment dimensions
     if (start_row == 0)
@@ -1429,10 +1429,10 @@ void handle_packet_sg_cdma(hsa_agent_dispatch_packet_t *pkt) {
   // packet is in active phase
   packet_set_active(pkt, true);
   volatile uint32_t *cdmab = (volatile uint32_t *)(CDMA_BASE);
-  u32 start_row = (pkt->arg[3] >> 0) & 0xff;
-  u32 num_rows = (pkt->arg[3] >> 8) & 0xff;
-  u32 start_col = (pkt->arg[3] >> 16) & 0xff;
-  u32 num_cols = (pkt->arg[3] >> 24) & 0xff;
+  uint32_t start_row = (pkt->arg[3] >> 0) & 0xff;
+  uint32_t num_rows = (pkt->arg[3] >> 8) & 0xff;
+  uint32_t start_col = (pkt->arg[3] >> 16) & 0xff;
+  uint32_t num_cols = (pkt->arg[3] >> 24) & 0xff;
   for (uint c = start_col; c < start_col + num_cols; c++) {
     for (uint r = start_row; r < start_row + num_rows; r++) {
       out32(getTileAddr(c, r) + 0x00032000, 0x2);
@@ -1481,11 +1481,11 @@ void handle_packet_sg_cdma(hsa_agent_dispatch_packet_t *pkt) {
 void handle_packet_cdma(hsa_agent_dispatch_packet_t *pkt) {
   // packet is in active phase
   packet_set_active(pkt, true);
-  u32 start_row = (pkt->arg[3] >> 0) & 0xff;
-  u32 num_rows = (pkt->arg[3] >> 8) & 0xff;
-  u32 start_col = (pkt->arg[3] >> 16) & 0xff;
-  u32 num_cols = (pkt->arg[3] >> 24) & 0xff;
-  u32 op = (pkt->arg[3] >> 32) & 0xff;
+  uint32_t start_row = (pkt->arg[3] >> 0) & 0xff;
+  uint32_t num_rows = (pkt->arg[3] >> 8) & 0xff;
+  uint32_t start_col = (pkt->arg[3] >> 16) & 0xff;
+  uint32_t num_cols = (pkt->arg[3] >> 24) & 0xff;
+  uint32_t op = (pkt->arg[3] >> 32) & 0xff;
   if (op == 2) {
     for (uint c = start_col; c < start_col + num_cols; c++) {
       for (uint r = start_row; r < start_row + num_rows; r++) {
@@ -1536,21 +1536,21 @@ void handle_packet_xaie_lock(hsa_agent_dispatch_packet_t *pkt) {
   // packet is in active phase
   packet_set_active(pkt, true);
 
-  u32 num_cols =
+  uint32_t num_cols =
       (((pkt->arg[0] >> 48) & 0xf) == AIR_ADDRESS_HERD_RELATIVE_RANGE)
           ? ((pkt->arg[0] >> 40) & 0xff)
           : 1;
-  u32 num_rows =
+  uint32_t num_rows =
       (((pkt->arg[0] >> 48) & 0xf) == AIR_ADDRESS_HERD_RELATIVE_RANGE)
           ? ((pkt->arg[0] >> 24) & 0xff)
           : 1;
-  u32 start_col = (pkt->arg[0] >> 32) & 0xff;
-  u32 start_row = (pkt->arg[0] >> 16) & 0xff;
-  u32 lock_id = pkt->arg[1];
-  u32 acqrel = pkt->arg[2];
-  u32 val = pkt->arg[3];
-  for (u32 col = 0; col < num_cols; col++) {
-    for (u32 row = 0; row < num_rows; row++) {
+  uint32_t start_col = (pkt->arg[0] >> 32) & 0xff;
+  uint32_t start_row = (pkt->arg[0] >> 16) & 0xff;
+  uint32_t lock_id = pkt->arg[1];
+  uint32_t acqrel = pkt->arg[2];
+  uint32_t val = pkt->arg[3];
+  for (uint32_t col = 0; col < num_cols; col++) {
+    for (uint32_t row = 0; row < num_rows; row++) {
       if (acqrel == 0)
         xaie_lock_acquire_nb(HerdCfgInst.col_start + start_col + col,
                              HerdCfgInst.row_start + start_row + row, lock_id,
@@ -1564,7 +1564,7 @@ void handle_packet_xaie_lock(hsa_agent_dispatch_packet_t *pkt) {
 }
 
 #ifdef ARM_CONTROLLER
-void handle_packet_xaie_status(hsa_agent_dispatch_packet_t *pkt, u32 type) {
+void handle_packet_xaie_status(hsa_agent_dispatch_packet_t *pkt, uint32_t type) {
   xil_printf("Reading status! %d %d %d\n\r", type, pkt->arg[0], pkt->arg[1]);
   if (type == 1) {
     mlir_aie_print_shimdma_status(pkt->arg[0]);
