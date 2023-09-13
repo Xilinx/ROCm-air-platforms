@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <vector>
 #include <algorithm>
+#include <numeric>
 #include <sys/stat.h>
 #include <gelf.h>
 
