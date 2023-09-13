@@ -16,6 +16,11 @@ To compile the driver, you will need the standard build tools for the Linux
 kernel. You can install the 'build-essentials' package on your distro to get
 these tools if you don't have them already installed.
 
+To build the driver run:
+```
+make
+```
+
 ## Loading and Unloading
 
 The driver will not load automatically since it is build out-of-tree and the
