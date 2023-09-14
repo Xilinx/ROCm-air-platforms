@@ -255,7 +255,7 @@ err_dev_mem_alloc:
   return ret;
 }
 
-hsa_status_t IterateAgents(hsa_agent_t agent, void *data) {
+hsa_status_t get_aie_agents(hsa_agent_t agent, void *data) {
   hsa_status_t status(HSA_STATUS_SUCCESS);
   hsa_device_type_t device_type;
   std::vector<hsa_agent_t> *aie_agents(nullptr);
@@ -279,7 +279,7 @@ hsa_status_t IterateAgents(hsa_agent_t agent, void *data) {
   return status;
 }
 
-hsa_status_t IterateMemPool(hsa_amd_memory_pool_t pool, void *data) {
+hsa_status_t get_global_mem_pool(hsa_amd_memory_pool_t pool, void *data) {
   hsa_status_t status(HSA_STATUS_SUCCESS);
   hsa_region_segment_t segment_type;
   status = hsa_amd_memory_pool_get_info(pool, HSA_AMD_MEMORY_POOL_INFO_SEGMENT,
@@ -335,11 +335,11 @@ int main(int argc, char *argv[]) {
   }
  
   // Finding all AIE HSA agents
-  hsa_iterate_agents(&IterateAgents, reinterpret_cast<void*>(&agents));
+  hsa_iterate_agents(&get_aie_agents, reinterpret_cast<void*>(&agents));
 
   // Iterating over memory pools to initialize our allocator
   hsa_amd_agent_iterate_memory_pools(agents.front(),
-                                     IterateMemPool,
+                                     get_global_mem_pool,
                                      reinterpret_cast<void*>(&global_mem_pool));
 
   // Getting the size of queue the agent supports
