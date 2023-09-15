@@ -1,7 +1,6 @@
 // Copyright (C) 2023, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 
-#include <stddef.h>
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/err.h>
@@ -9,6 +8,7 @@
 #include <linux/file.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/stddef.h>
 #include <linux/uaccess.h>
 #include <linux/compat.h>
 #include <linux/time.h>
