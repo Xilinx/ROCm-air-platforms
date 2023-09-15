@@ -19,6 +19,7 @@
 #include <linux/fdtable.h>
 #include <linux/processor.h>
 #include <linux/pci.h>
+#include <linux/version.h>
 
 #include "amdair_admin_aql_queue.h"
 #include "amdair_chardev.h"
@@ -183,7 +184,11 @@ static const struct amdair_ioctl_desc amdair_ioctl_table[] = {
 			 amdair_ioctl_free_device_memory, 0),
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,2,0)
+static char *amdair_devnode(const struct device *dev, umode_t *mode)
+#else
 static char *amdair_devnode(struct device *dev, umode_t *mode)
+#endif
 {
 	if (mode)
 		*mode = 0666;
@@ -312,7 +317,7 @@ static int amdair_open(struct inode *node, struct file *filp)
 
 	if (ret)
 		goto err_process_create;
-	
+
 	filp->private_data = air_process;
 
 err_process_create:
