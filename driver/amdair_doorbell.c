@@ -1,3 +1,6 @@
+// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
+
 #include "amdair_device.h"
 #include "amdair_doorbell.h"
 

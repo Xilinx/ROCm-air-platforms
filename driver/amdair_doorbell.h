@@ -1,3 +1,6 @@
+// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
+
 #ifndef AMDAIR_DOORBELL_H_
 #define AMDAIR_DOORBELL_H_
 

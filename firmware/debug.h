@@ -1,3 +1,10 @@
+//===- debug.h ---------------------------------------------------*- C++ -*-===//
+//
+// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef DEBUG_H_
 #define DEBUG_H_
 

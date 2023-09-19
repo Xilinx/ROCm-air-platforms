@@ -1,3 +1,6 @@
+// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
+
 #include <linux/io-64-nonatomic-hi-lo.h>
 #include <linux/pci.h>
 

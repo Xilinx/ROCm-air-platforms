@@ -1,3 +1,10 @@
+//===- hsa_csr.cpp -----------------------------------------------*- C++ -*-===//
+//
+// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
+//
+//===----------------------------------------------------------------------===//
+
 #include "hsa_csr.h"
 
 #include "debug.h"

@@ -1,3 +1,10 @@
+//===- airbin.h --------------------------------------------------*- C++ -*-===//
+//
+// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef AIRBIN_H
 #define AIRBIN_H
 
