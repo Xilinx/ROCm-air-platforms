@@ -1,5 +1,5 @@
 // Copyright (C) 2023, Advanced Micro Devices, Inc.
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: MIT
 
 #ifndef AMDAIR_DEVICE_H_
 #define AMDAIR_DEVICE_H_
