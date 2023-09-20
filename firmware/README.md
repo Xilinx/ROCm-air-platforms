@@ -4,7 +4,7 @@ The ARM processor acts as an HSA AQL packet processor that manages AIE configura
 
 ## Compiling
 
-Simply run `make` to compile the firmware. This will generate an output elf in `build/acdc_agent/Debug/acdc_agent.elf`.
+Note, compiling the firmware from source requires the `.xsa` file generated in the platform build process. Refer to the [platform documentation](../platform/vck5000) on how to do this. Afterwards, simply run `make` to compile the firmware. This will generate an output elf in `build/acdc_agent/Debug/acdc_agent.elf`.
 
 
 ## Loading
