@@ -6,13 +6,20 @@ Both the experimental [rocm-5.6.x-air branch](https://github.com/RadeonOpenCompu
 
 ## Getting Started
 
-1. **Install the ROCm release:** Refer to the experimental [rocm-5.6.x-air branch](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air) instructions on how to install our experimental ROCm release. The build instructions for ROCr are found in the ROCr-Runtime/src/ directory's README.
+1. **Install the ROCm release:** Follow the following steps to install ROCm and our experimental converged ROCm runtime:
+  1. Follow the instructions provided to [install a global version of ROCM 5.6](https://rocm.docs.amd.com/en/docs-5.6.0/deploy/linux/os-native/install.html). We assume that ROCm is installed in `/opt/rocm`. If it is not, user provided arguments can be applied to the following scripts to point to the correct location.
+  2. Locally install ROCt 5.6. We provide a script to clone the repository from GitHub and install the library. Simply run `./utils/clone-build-roct.sh`.
+  3. Locally install our experimental converged ROCm runtime (ROCr). We provide a script to clone the repository from GitHub and install the library. Simply run `./utils/clone-build-rocr.sh`
+  4. Now, set the environment variable `${ROCM_ROOT}` to the `rocm` directory. This will setup CMake to be able to compile the provided examples using our experimental ROCm runtime.
+
+Refer to the experimental [rocm-5.6.x-air branch](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air) instructions on how to install our experimental ROCm release. The build instructions for ROCr are found in the ROCr-Runtime/src/ directory's README.
+
    
-3. **Configure the board:** Refer to the [platform documentation](platform/vck5000) on how to load the platform on the VCK5000.
+2. **Configure the board:** Refer to the [platform documentation](platform/vck5000) on how to load the platform on the VCK5000.
    
-4. **Insert the driver:** Refer to the [driver documentation](driver) on how to compile and load the driver.
+3. **Insert the driver:** Refer to the [driver documentation](driver) on how to compile and load the driver.
    
-5. **Run the example:** Refer to the [weather stencil application](examples/sparta-weather-stencil) on how to compile and execute the application on the ROCm AIR platform.
+4. **Run the example:** Refer to the [weather stencil application](examples/sparta-weather-stencil) on how to compile and execute the application on the ROCm AIR platform.
 
 ## Examples
 
