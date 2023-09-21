@@ -8,10 +8,11 @@ Both the experimental [rocm-5.6.x-air branch](https://github.com/RadeonOpenCompu
 
 1. **Install the ROCm release:** Follow the following steps to install ROCm and our experimental converged ROCm runtime:
   
-    1. Follow the instructions provided to [install a global version of ROCM 5.6](https://rocm.docs.amd.com/en/docs-5.6.0/deploy/linux/os-native/install.html). We will then install local copies of ROCt and our experimental ROCr which utilize this global install. We assume that ROCm is installed in `/opt/rocm`. If it is not, user provided arguments can be applied to the following scripts to point to the correct location.
-    2. Locally install ROCt 5.6. We provide a script to clone the repository from GitHub and install the library. Simply run `./utils/clone-build-roct.sh`.
-    3. Locally install our [experimental converged ROCm runtime (ROCr) 5.6](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air). We provide a script to clone the repository from GitHub and install the library. Simply run `./utils/clone-build-rocr.sh`
-    4. Now, set the environment variable `${ROCM_ROOT}` to `./rocm`. This environment variable is used to point to the local ROCr runtime install when compiling our provided examples. 
+    1. Follow the instructions provided to [install a global version of ROCM 5.6](https://rocm.docs.amd.com/en/docs-5.6.0/deploy/linux/os-native/install.html). Note that it is necessary to specifically install the ROCm HIP SDK for 5.6 using `sudo apt install rocm-hip-sdk5.6.0`.
+    3. We will then install local copies of ROCt and our experimental ROCr which utilize this global install. We assume that ROCm is installed in `/opt/rocm`. If it is not, user provided arguments can be applied to the following scripts to point to the correct location.
+    4. Locally install ROCt 5.6. We provide a script to clone the repository from GitHub and install the library. Simply run `./utils/clone-build-roct.sh`.
+    5. Locally install our [experimental converged ROCm runtime (ROCr) 5.6](https://github.com/RadeonOpenCompute/ROCR-Runtime/tree/experimental/rocm-5.6.x-air). We provide a script to clone the repository from GitHub and install the library. Simply run `./utils/clone-build-rocr.sh`
+    6. Now, set the environment variable `${ROCM_ROOT}` to `./rocm`. This environment variable is used to point to the local ROCr runtime install when compiling our provided examples. 
    
 2. **Configure the board:** Refer to the [platform documentation](platform/vck5000) on how to load the platform on the VCK5000.
    
