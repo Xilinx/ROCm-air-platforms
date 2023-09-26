@@ -4,8 +4,8 @@
 #include "amdair_admin_aql_queue.h"
 #include "amdair_device.h"
 #include "amdair_queue.h"
-#include "vck5000_regs.h"
 #include "vck5000.h"
+#include "vck5000_regs.h"
 
 static uint64_t vck5000_get_aie_mem_range(void) {
   return VCK5000_AIE_MEM_RANGE;
