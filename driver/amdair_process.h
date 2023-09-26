@@ -4,8 +4,8 @@
 #ifndef AMDAIR_PROCESS_H_
 #define AMDAIR_PROCESS_H_
 
-#include <linux/interval_tree.h>
 #include <linux/idr.h>
+#include <linux/interval_tree.h>
 
 #include "amdair_device.h"
 

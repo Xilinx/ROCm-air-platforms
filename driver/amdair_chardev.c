@@ -1,24 +1,24 @@
 // Copyright (C) 2023, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 
+#include <linux/compat.h>
 #include <linux/device.h>
-#include <linux/export.h>
+#include <linux/dma-buf.h>
 #include <linux/err.h>
-#include <linux/fs.h>
+#include <linux/export.h>
+#include <linux/fdtable.h>
 #include <linux/file.h>
+#include <linux/fs.h>
+#include <linux/mm.h>
+#include <linux/mman.h>
+#include <linux/pci.h>
+#include <linux/processor.h>
+#include <linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/stddef.h>
-#include <linux/uaccess.h>
-#include <linux/compat.h>
 #include <linux/time.h>
-#include <linux/mm.h>
-#include <linux/mman.h>
-#include <linux/ptrace.h>
-#include <linux/dma-buf.h>
-#include <linux/fdtable.h>
-#include <linux/processor.h>
-#include <linux/pci.h>
+#include <linux/uaccess.h>
 #include <linux/version.h>
 
 #include "amdair_admin_aql_queue.h"

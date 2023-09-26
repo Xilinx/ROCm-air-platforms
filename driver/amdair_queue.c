@@ -1,5 +1,4 @@
 #include "amdair_queue.h"
-
 #include "amdair_device.h"
 
 int amdair_queue_find_free(struct amdair_device *air_dev)

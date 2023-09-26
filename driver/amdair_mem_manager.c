@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (C) 2023, Advanced Micro Devices, Inc.
 
-#include "amdair_mem_manager.h"
-
 #include <linux/pci.h>
 
 #include "amdair_device.h"
+#include "amdair_mem_manager.h"
 #include "amdair_object.h"
 
 int amdair_mman_init(struct amdair_device *air_dev)

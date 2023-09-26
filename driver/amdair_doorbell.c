@@ -1,6 +1,5 @@
-#include "amdair_doorbell.h"
-
 #include "amdair_device.h"
+#include "amdair_doorbell.h"
 
 uint32_t amdair_doorbell_find_free(struct amdair_device *air_dev)
 {
