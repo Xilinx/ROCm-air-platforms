@@ -26,7 +26,7 @@ We provide an [examples directory](examples) which houses examples which utilize
 
 * **examples/sparta-weather-stencil:** Real-world climate and weather simulations involve the utilization of complex compound stencil kernels, which are composed of a combination of different stencils. Horizontal diffusion is one such important compound stencil found in many regional global climate and weather prediction models. The horizontal diffusion kernel is mapped across three AI Engine tiles. We carefully hand-tune the code to overlap memory operations with arithmetic operations, to improve performance. We use the AIE data forwarding interfaces to forward the results from the first AIE core (used for Laplacian calculation) to the subsequent AIE cores (used for flux calculation). This approach allows for the concurrent execution of multiple stencil calculations, which can increase the overall performance and throughput of the hdiff design.  The performance of the hdiff implementation can be maximized by scaling it out across as many AIE cores as possible while avoiding data starvation. We develop a bundle or B-block-based design. A B-block is a cluster of AIE cores connected to the same shimDMA input/output channel. In our design, we choose a B-Block to consist of 12-AI Engine tiles, of which we utilize four to consume a total of 48 AI Engine tiles. 
 
-## Platforms
+## 
 
 This repository provides a hardware platform configuraton to enable ROCm for AMD AI Engine devices. We currently only provide a platform which runs on the AMD Versal VCK5000.  
 
@@ -36,7 +36,7 @@ The [VCK5000](https://www.xilinx.com/products/boards-and-kits/vck5000.html) is a
 
 ## Firmware
 
-We provide the firmware which runs on the ARM core in the [firmware directory](firmware). The firmware describes how the ARM implements the HSA agent abstraction and handles AQL packets. Most users will not need to touch this as the provided [platform configuration](platforms/vck5000) contains the default firmware. For users looking to modify the firmware, please refer to the [firmware documentation](firmware) for more information on how to compile and dynamically load new firmware on the device. 
+We provide the firmware which runs on the ARM core in the [firmware directory](firmware). The firmware describes how the ARM implements the HSA agent abstraction and handles AQL packets. Most users will not need to touch this as the provided [platform configuration](platform/vck5000) contains the default firmware. For users looking to modify the firmware, please refer to the [firmware documentation](firmware) for more information on how to compile and dynamically load new firmware on the device. 
 
 ## Driver 
 
