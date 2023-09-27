@@ -17,20 +17,22 @@
 #include "hsa/hsa_ext_amd.h"
 
 // Used to define the size of the application data
-#define B_BLOCK_DEPTH 4 // set how many rows
-#define INPUT_ROWS 9
-#define DMA_COUNT_IN 256 * INPUT_ROWS
-#define DMA_COUNT_OUT 256 * 2 * B_BLOCK_DEPTH
+auto constexpr b_block_depth = 4; // set how many rows
+auto constexpr input_rows = 9;
+auto constexpr dma_count_in = 256 * input_rows;
+auto constexpr dma_count_out = 256 * 2 * b_block_depth;
 
 // NOTE: These will shortly be moved to
 // the converged ROCm runtime
-#define AIR_PKT_TYPE_ND_MEMCPY 0x0103L
-#define AIR_PKT_TYPE_AIRBIN 0x53L
+namespace air::pkt::type {
+auto constexpr nd_memcpy = 0x0103L;
+auto constexpr airbin = 0x53L;
+} // namespace air::pkt::type
 
 /*
   Defining the size of memory we allocate to store the AIE configuration
 */
-constexpr uint64_t BINARY_REGION_SIZE = 6 * 1024 * 1024;
+constexpr uint64_t binary_region_size = 6 * 1024 * 1024;
 
 /*
   Each entry describes a loadable section in device memory. The device uses
@@ -51,7 +53,7 @@ hsa_amd_memory_pool_t global_mem_pool;
 */
 hsa_status_t air_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt,
                                     uint64_t table, uint16_t column) {
-  pkt->type = AIR_PKT_TYPE_AIRBIN;
+  pkt->type = air::pkt::type::airbin;
   pkt->header = (HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE);
   pkt->arg[0] = table;
   pkt->arg[1] = column;
@@ -84,7 +86,7 @@ air_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint16_t herd_id, uint8_t
   pkt->arg[3] |= ((uint64_t)transfer_length4d) << 32;
   pkt->arg[3] |= ((uint64_t)transfer_stride4d) << 48;
 
-  pkt->type = AIR_PKT_TYPE_ND_MEMCPY;
+  pkt->type = air::pkt::type::nd_memcpy;
   pkt->header = (HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE);
 
   return HSA_STATUS_SUCCESS;
@@ -125,17 +127,17 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
 
   // calculate the size needed to load
   fstat(elf_fd, &elf_stat);
-  if(table_size > BINARY_REGION_SIZE) {
+  if (table_size > binary_region_size) {
     std::cerr << "Table size is larger than allocated DRAM. Exiting\n" << std::endl;
     ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
     goto err_elf_open;
   }
 
   // get some DRAM from the device
-  hsa_amd_memory_pool_allocate(global_mem_pool, BINARY_REGION_SIZE, 0, (void **)&dram_ptr);
+  hsa_amd_memory_pool_allocate(global_mem_pool, binary_region_size, 0, (void **)&dram_ptr);
 
   if (dram_ptr == NULL) {
-    std::cerr << "Error allocating " << BINARY_REGION_SIZE << " DRAM"<< std::endl;
+    std::cerr << "Error allocating " << binary_region_size << " DRAM"<< std::endl;
     ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
     goto err_dev_mem_alloc;
   }
@@ -211,7 +213,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
     data_offset += shdr.sh_size;
     data_ptr += shdr.sh_size;
 
-    if(data_offset > BINARY_REGION_SIZE) {
+    if (data_offset > binary_region_size) {
       std::cerr << "[ERROR] Overwriting allocated DRAM size. Exiting\n" << std::endl;
       ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
       goto err_elf_read;
@@ -349,7 +351,7 @@ int main(int argc, char *argv[]) {
                               HSA_QUEUE_TYPE_SINGLE, nullptr, nullptr, 0,
                               0, &q);
 
-  if(queue_create_status != HSA_STATUS_SUCCESS) {
+  if (queue_create_status != HSA_STATUS_SUCCESS) {
     std::cerr << "hsa_queue_create failed" << std::endl;
     hsa_shut_down();
     return -1;
@@ -357,7 +359,7 @@ int main(int argc, char *argv[]) {
 
   // Adding to our vector of queues
   queues.push_back(q);
-  if(queues.size() == 0) {
+  if (queues.size() == 0) {
     std::cerr << "No queues were sucesfully created!" << std::endl;
     hsa_queue_destroy(queues.front());
     hsa_shut_down();
@@ -384,18 +386,18 @@ int main(int argc, char *argv[]) {
   uint32_t *ddr_ptr_out_1 = NULL;
   uint32_t *ddr_ptr_out_2 = NULL;
   uint32_t *ddr_ptr_out_3 = NULL;
-  hsa_amd_memory_pool_allocate(global_mem_pool, DMA_COUNT_IN * sizeof(uint32_t), 0, (void **)&ddr_ptr_in_0);
-  hsa_amd_memory_pool_allocate(global_mem_pool, DMA_COUNT_IN * sizeof(uint32_t), 0, (void **)&ddr_ptr_in_1);
-  hsa_amd_memory_pool_allocate(global_mem_pool, DMA_COUNT_IN * sizeof(uint32_t), 0, (void **)&ddr_ptr_in_2);
-  hsa_amd_memory_pool_allocate(global_mem_pool, DMA_COUNT_IN * sizeof(uint32_t), 0, (void **)&ddr_ptr_in_3);
-  hsa_amd_memory_pool_allocate(global_mem_pool, DMA_COUNT_OUT * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_0);
-  hsa_amd_memory_pool_allocate(global_mem_pool, DMA_COUNT_OUT * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_1);
-  hsa_amd_memory_pool_allocate(global_mem_pool, DMA_COUNT_OUT * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_2);
-  hsa_amd_memory_pool_allocate(global_mem_pool, DMA_COUNT_OUT * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_3);
+  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_in * sizeof(uint32_t), 0, (void **)&ddr_ptr_in_0);
+  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_in * sizeof(uint32_t), 0, (void **)&ddr_ptr_in_1);
+  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_in * sizeof(uint32_t), 0, (void **)&ddr_ptr_in_2);
+  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_in * sizeof(uint32_t), 0, (void **)&ddr_ptr_in_3);
+  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_out * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_0);
+  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_out * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_1);
+  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_out * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_2);
+  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_out * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_3);
 
   // initialize the external buffers
-  std::vector<int> in_v(DMA_COUNT_IN);
-  std::iota(std::begin(in_v), std::end(in_v), 0); // Fill with 0, 1, ..., DMA_COUNT_IN-1.
+  std::vector<int> in_v(dma_count_in);
+  std::iota(std::begin(in_v), std::end(in_v), 0); // Fill with 0, 1, ..., dma_count_in-1.
   std::copy(in_v.begin(), in_v.end(), ddr_ptr_in_0);
   std::copy(in_v.begin(), in_v.end(), ddr_ptr_in_1);
   std::copy(in_v.begin(), in_v.end(), ddr_ptr_in_2);
@@ -411,7 +413,7 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  std::vector<int> out_v(DMA_COUNT_OUT);
+  std::vector<int> out_v(dma_count_out);
   std::fill(std::begin(out_v), std::end(out_v), 0); // Fill with 0
   std::copy(out_v.begin(), out_v.end(), ddr_ptr_out_0);
   std::copy(out_v.begin(), out_v.end(), ddr_ptr_out_1);
@@ -433,7 +435,7 @@ int main(int argc, char *argv[]) {
   hsa_agent_dispatch_packet_t pkt;
   air_packet_nd_memcpy(&pkt, 0, starting_col, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_0),
-                       DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
+                       dma_count_in * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt;
 
@@ -446,7 +448,7 @@ int main(int argc, char *argv[]) {
   hsa_agent_dispatch_packet_t pkt2;
   air_packet_nd_memcpy(&pkt2, 0, starting_col, 0, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_0),
-                       DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
+                       dma_count_out * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt2.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt2;
 
@@ -460,7 +462,7 @@ int main(int argc, char *argv[]) {
   hsa_agent_dispatch_packet_t pkt3;
   air_packet_nd_memcpy(&pkt3, 0, starting_col, 1, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_1),
-                       DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
+                       dma_count_in * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt3.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt3;
 
@@ -473,7 +475,7 @@ int main(int argc, char *argv[]) {
   hsa_agent_dispatch_packet_t pkt4;
   air_packet_nd_memcpy(&pkt4, 0, starting_col, 0, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_1),
-                       DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
+                       dma_count_out * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt4.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt4;
 
@@ -487,7 +489,7 @@ int main(int argc, char *argv[]) {
   hsa_agent_dispatch_packet_t pkt5;
   air_packet_nd_memcpy(&pkt5, 0, starting_col+1, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_2),
-                       DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
+                       dma_count_in * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt5.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt5;
 
@@ -500,7 +502,7 @@ int main(int argc, char *argv[]) {
   hsa_agent_dispatch_packet_t pkt6;
   air_packet_nd_memcpy(&pkt6, 0, starting_col+1, 0, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_2),
-                       DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
+                       dma_count_out * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt6.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt6;
 
@@ -514,7 +516,7 @@ int main(int argc, char *argv[]) {
   hsa_agent_dispatch_packet_t pkt7;
   air_packet_nd_memcpy(&pkt7, 0, starting_col+1, 1, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_3),
-                       DMA_COUNT_IN * sizeof(float), 1, 0, 1, 0, 1, 0);
+                       dma_count_in * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt7.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt7;
 
@@ -527,7 +529,7 @@ int main(int argc, char *argv[]) {
   hsa_agent_dispatch_packet_t pkt8;
   air_packet_nd_memcpy(&pkt8, 0, starting_col+1, 0, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_3),
-                       DMA_COUNT_OUT * sizeof(float), 1, 0, 1, 0, 1, 0);
+                       dma_count_out * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt8.completion_signal = dma_signal;
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt8;
 
@@ -543,7 +545,7 @@ int main(int argc, char *argv[]) {
   hsa_signal_destroy(dma_signal);
 
   for (int i = 0; i < 512; i++) {
-    if(ddr_ptr_out_0[i] != 514 + i) {
+    if (ddr_ptr_out_0[i] != 514 + i) {
       std::cerr << "[ERROR] " << ddr_ptr_out_0[i] << " != " << 514 + i << std::endl;
       errors++;
     }
@@ -587,7 +589,7 @@ int main(int argc, char *argv[]) {
 
   // Shutting down HSA
   hsa_ret = hsa_shut_down();
-  if(hsa_ret != HSA_STATUS_SUCCESS) {
+  if (hsa_ret != HSA_STATUS_SUCCESS) {
     std::cerr << "[ERROR] hsa_shut_down() failed\n" << std::endl;
     return HSA_STATUS_ERROR;
   }
