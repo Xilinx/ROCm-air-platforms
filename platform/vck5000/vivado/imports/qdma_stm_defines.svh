@@ -1,5 +1,4 @@
-// Copyright (C) 2022, Xilinx Inc.
-// Copyright (C) 2022, Advanced Micro Devices, Inc.
+// Copyright (C) 2022, Advanced Micro Devices, Inc. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 `ifndef QDMA_STM_DEFINES_SVH
