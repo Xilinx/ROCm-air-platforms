@@ -45,7 +45,7 @@ struct airbin_table_entry {
   uint64_t addr;   // base address to load the data
 };
 
-// Use a global variable to story the memory pool information
+// Use a global variable to store the memory pool information
 hsa_amd_memory_pool_t global_mem_pool;
 
 /*
@@ -255,28 +255,22 @@ err_dev_mem_alloc:
   return ret;
 }
 
-hsa_status_t get_aie_agents(hsa_agent_t agent, void *data) {
-  hsa_status_t status(HSA_STATUS_SUCCESS);
+/// Call back function used by agent enumeration
+hsa_status_t get_aie_agent(hsa_agent_t agent, void *data) {
+  if (!data)
+    return HSA_STATUS_ERROR_INVALID_ARGUMENT;
+
+  auto aie_agents = static_cast<std::vector<hsa_agent_t>*>(data);
   hsa_device_type_t device_type;
-  std::vector<hsa_agent_t> *aie_agents(nullptr);
-
-  if (!data) {
-    status = HSA_STATUS_ERROR_INVALID_ARGUMENT;
+  if (hsa_status_t status =
+          hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
+      status != HSA_STATUS_SUCCESS)
     return status;
-  }
 
-  aie_agents = static_cast<std::vector<hsa_agent_t>*>(data);
-  status = hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
-
-  if (status != HSA_STATUS_SUCCESS) {
-    return status;
-  }
-
-  if (device_type == HSA_DEVICE_TYPE_AIE) {
+  if (device_type == HSA_DEVICE_TYPE_AIE)
     aie_agents->push_back(agent);
-  }
 
-  return status;
+  return HSA_STATUS_SUCCESS;
 }
 
 hsa_status_t get_global_mem_pool(hsa_amd_memory_pool_t pool, void *data) {
@@ -333,9 +327,9 @@ int main(int argc, char *argv[]) {
     std::cerr << "hsa_init failed" << std::endl;
     return -1;
   }
- 
+
   // Finding all AIE HSA agents
-  hsa_iterate_agents(&get_aie_agents, reinterpret_cast<void*>(&agents));
+  hsa_iterate_agents(get_aie_agent, reinterpret_cast<void*>(&agents));
 
   // Iterating over memory pools to initialize our allocator
   hsa_amd_agent_iterate_memory_pools(agents.front(),
