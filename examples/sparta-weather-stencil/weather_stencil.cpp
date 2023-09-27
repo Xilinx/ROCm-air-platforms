@@ -402,6 +402,16 @@ int main(int argc, char *argv[]) {
   std::copy(in_v.begin(), in_v.end(), ddr_ptr_in_1);
   std::copy(in_v.begin(), in_v.end(), ddr_ptr_in_2);
   std::copy(in_v.begin(), in_v.end(), ddr_ptr_in_3);
+
+  // Make sure data was written to the device correctly
+  for(int i = 0; i < DMA_COUNT_IN; i++) {
+    if(ddr_ptr_in_0[i] != i || ddr_ptr_in_1[i] != i || ddr_ptr_in_2[i] != i || ddr_ptr_in_3[i] != i) {
+      std::cerr << "[ERROR] Input buffer was not written to correctly\n" << std::endl;
+      hsa_queue_destroy(queues.front());
+      hsa_shut_down();
+      return -1;
+    }
+  }
   
   std::vector<int> out_v(DMA_COUNT_OUT);
   std::fill(std::begin(out_v), std::end(out_v), 0); // Fill with 0
