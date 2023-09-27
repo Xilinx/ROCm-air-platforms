@@ -324,12 +324,16 @@ int main(int argc, char *argv[]) {
   // Initializing HSA
   hsa_status_t hsa_ret = hsa_init();
   if (hsa_ret != HSA_STATUS_SUCCESS) {
-    std::cerr << "hsa_init failed" << std::endl;
+    std::cerr << "hsa_init failed!" << std::endl;
     return -1;
   }
 
   // Finding all AIE HSA agents
   hsa_iterate_agents(get_aie_agent, reinterpret_cast<void*>(&agents));
+  if (agents.empty()) {
+    std::cerr << "No AIE HSA agent found!" << std::endl;
+    return -1;
+  }
 
   // Iterating over memory pools to initialize our allocator
   hsa_amd_agent_iterate_memory_pools(agents.front(),
