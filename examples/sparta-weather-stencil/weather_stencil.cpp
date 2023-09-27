@@ -334,18 +334,20 @@ int main(int argc, char *argv[]) {
     std::cerr << "No AIE HSA agent found!" << std::endl;
     return -1;
   }
+  // Use the first agent
+  auto agent = agents.front();
 
-  // Iterating over memory pools to initialize our allocator
-  hsa_amd_agent_iterate_memory_pools(agents.front(),
+  // Iterating over memory pools to initialize our allocator on first agent
+  hsa_amd_agent_iterate_memory_pools(agent,
                                      get_global_mem_pool,
                                      reinterpret_cast<void*>(&global_mem_pool));
 
   // Getting the size of queue the agent supports
-  hsa_agent_get_info(agents.front(), HSA_AGENT_INFO_QUEUE_MAX_SIZE, &aie_max_queue_size);
+  hsa_agent_get_info(agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &aie_max_queue_size);
 
   // Creating a queue
   hsa_queue_t *q = NULL;
-  auto queue_create_status = hsa_queue_create(agents.front(), aie_max_queue_size,
+  auto queue_create_status = hsa_queue_create(agent, aie_max_queue_size,
                               HSA_QUEUE_TYPE_SINGLE, nullptr, nullptr, 0,
                               0, &q);
 
@@ -365,7 +367,7 @@ int main(int argc, char *argv[]) {
   }
 
   // Configuring the device
-  auto airbin_ret = air_load_airbin(agents.data(), queues.front(), "sparta-1DU.elf", starting_col);
+  auto airbin_ret = air_load_airbin(&agent, queues.front(), "sparta-1DU.elf", starting_col);
   if (airbin_ret != HSA_STATUS_SUCCESS) {
     std::cerr << "Loading airbin failed: " << airbin_ret << std::endl;
     hsa_queue_destroy(queues.front());
@@ -412,7 +414,7 @@ int main(int argc, char *argv[]) {
   // Each packet completion will decrement the signal.
   // Once it reaches zero we will know that all DMAs are complete.
   hsa_signal_t dma_signal;
-  hsa_amd_signal_create_on_agent(8, 0, nullptr, agents.data(), 0, &dma_signal);
+  hsa_amd_signal_create_on_agent(8, 0, nullptr, &agent, 0, &dma_signal);
 
   //////////////////////////////////////// B Block 0
   //
