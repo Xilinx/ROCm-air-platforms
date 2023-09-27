@@ -95,7 +95,7 @@ air_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint16_t herd_id, uint8_t
 /*
   Load an airbin from a file into a device
 */
-hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
+hsa_status_t air_load_airbin(hsa_agent_t agent, hsa_queue_t *q,
                              const char *filename, uint8_t column) {
   hsa_status_t ret = HSA_STATUS_SUCCESS;
   int elf_fd = 0;
@@ -230,7 +230,7 @@ hsa_status_t air_load_airbin(hsa_agent_t *agent, hsa_queue_t *q,
   air_packet_load_airbin(&pkt, (uint64_t)airbin_table, (uint16_t)column);
 
   // dispatch and wait has blocking semantics so we can internally create the signal
-  hsa_amd_signal_create_on_agent(1, 0, nullptr, agent, 0, &(pkt.completion_signal));
+  hsa_amd_signal_create_on_agent(1, 0, nullptr, &agent, 0, &(pkt.completion_signal));
 
   // Write the packet to the queue
   reinterpret_cast<hsa_agent_dispatch_packet_t *>(q->base_address)[wr_idx % q->size] = pkt;
@@ -367,7 +367,7 @@ int main(int argc, char *argv[]) {
   }
 
   // Configuring the device
-  auto airbin_ret = air_load_airbin(&agent, queues.front(), "sparta-1DU.elf", starting_col);
+  auto airbin_ret = air_load_airbin(agent, queues.front(), "sparta-1DU.elf", starting_col);
   if (airbin_ret != HSA_STATUS_SUCCESS) {
     std::cerr << "Loading airbin failed: " << airbin_ret << std::endl;
     hsa_queue_destroy(queues.front());
