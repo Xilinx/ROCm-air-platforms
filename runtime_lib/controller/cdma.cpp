@@ -19,7 +19,7 @@
 #define CDMA_MAX_SG_DESCS 512
 #define CDMA_SG_NO_PREV (uint32_t)(-1)
 #define CDMA_MAX_TRANSFER_LEN (1 << 26) // 64MB
-#define CDMA_ALIGNMENT_FACTOR 8 // must be aligned to 0x40 bytes
+#define CDMA_ALIGNMENT_FACTOR 8         // must be aligned to 0x40 bytes
 
 #define REG_CDMA_CR (CDMA_BASE + 0x00UL)        // control
 #define REG_CDMA_SR (CDMA_BASE + 0x04UL)        // status
@@ -57,7 +57,7 @@ struct cdma_sg_descriptor {
 };
 
 // CDMA descriptors must be aligned to 16-byte addresses
-static cdma_sg_descriptor descs[CDMA_MAX_SG_DESCS] __attribute__((aligned (64)));
+static cdma_sg_descriptor descs[CDMA_MAX_SG_DESCS] __attribute__((aligned(64)));
 
 /*
   reset DMA engine
@@ -141,10 +141,12 @@ void cdma_sg_start(uint32_t head, uint32_t tail) {
 uint32_t cdma_sg_start_sync(uint32_t head, uint32_t tail) {
 #ifdef USE_MEMCPY
   for (uint32_t idx = head; idx <= tail; idx++) {
-    uint64_t src = (uint64_t)descs[idx].src | ((uint64_t)descs[idx].src_msb) << 32;
-    uint64_t dest = (uint64_t)descs[idx].dest | ((uint64_t)descs[idx].dest_msb) << 32;
+    uint64_t src = (uint64_t)descs[idx].src | ((uint64_t)descs[idx].src_msb)
+                                                  << 32;
+    uint64_t dest = (uint64_t)descs[idx].dest | ((uint64_t)descs[idx].dest_msb)
+                                                    << 32;
     uint32_t length = descs[idx].ctrl;
-    memcpy((void*)dest, (void*)src, length);
+    memcpy((void *)dest, (void *)src, length);
   }
   return 0;
 #else
@@ -154,30 +156,32 @@ uint32_t cdma_sg_start_sync(uint32_t head, uint32_t tail) {
   while (!(IO_READ32(REG_CDMA_SR) & REG_CDMA_SR_IDLE))
     ;
   return (IO_READ32(REG_CDMA_SR) &
-    (REG_CDMA_SR_SG_DEC_ERR
-    |REG_CDMA_SR_SG_SLV_ERR
-    |REG_CDMA_SR_SG_INT_ERR
-    |REG_CDMA_SR_DMA_DEC_ERR
-    |REG_CDMA_SR_DMA_SLV_ERR
-    |REG_CDMA_SR_DMA_INT_ERR));
+          (REG_CDMA_SR_SG_DEC_ERR | REG_CDMA_SR_SG_SLV_ERR |
+           REG_CDMA_SR_SG_INT_ERR | REG_CDMA_SR_DMA_DEC_ERR |
+           REG_CDMA_SR_DMA_SLV_ERR | REG_CDMA_SR_DMA_INT_ERR));
 #endif // USE_MEMCPY
 }
 
 void cdma_print_status(void) {
-  xil_printf("Control: 0x%08x Status: 0x%08x\r\n",
-    IO_READ32(REG_CDMA_CR), IO_READ32(REG_CDMA_SR));
+  xil_printf("Control: 0x%08x Status: 0x%08x\r\n", IO_READ32(REG_CDMA_CR),
+             IO_READ32(REG_CDMA_SR));
 
   xil_printf("Current descriptor: 0x%lx\r\n",
-    (uint64_t)IO_READ32(REG_CDMA_CURR_DESC) | (uint64_t)IO_READ32(REG_CDMA_CURR_DESC_MSB) << 32);
+             (uint64_t)IO_READ32(REG_CDMA_CURR_DESC) |
+                 (uint64_t)IO_READ32(REG_CDMA_CURR_DESC_MSB) << 32);
 
   xil_printf("Tail descriptor: 0x%lx\r\n",
-    (uint64_t)IO_READ32(REG_CDMA_TAIL_DESC) | (uint64_t)IO_READ32(REG_CDMA_TAIL_DESC_MSB) << 32);
+             (uint64_t)IO_READ32(REG_CDMA_TAIL_DESC) |
+                 (uint64_t)IO_READ32(REG_CDMA_TAIL_DESC_MSB) << 32);
 
-  for (uint32_t idx=0; idx < CDMA_MAX_SG_DESCS; idx++) {
-    xil_printf("[%06lx] src=0x%08lx dest=0x%08lx length=0x%x status=0x%x next=0x%08lx\r\n",
-      (uint64_t)&descs[idx], (uint64_t)descs[idx].src | ((uint64_t)descs[idx].src_msb) << 32,
-      (uint64_t)descs[idx].dest | ((uint64_t)descs[idx].dest_msb) << 32,
-      descs[idx].ctrl, descs[idx].status,
-      (uint64_t)descs[idx].next | ((uint64_t)descs[idx].next_msb) << 32);
+  for (uint32_t idx = 0; idx < CDMA_MAX_SG_DESCS; idx++) {
+    xil_printf(
+        "[%06lx] src=0x%08lx dest=0x%08lx length=0x%x status=0x%x "
+        "next=0x%08lx\r\n",
+        (uint64_t)&descs[idx],
+        (uint64_t)descs[idx].src | ((uint64_t)descs[idx].src_msb) << 32,
+        (uint64_t)descs[idx].dest | ((uint64_t)descs[idx].dest_msb) << 32,
+        descs[idx].ctrl, descs[idx].status,
+        (uint64_t)descs[idx].next | ((uint64_t)descs[idx].next_msb) << 32);
   }
 }

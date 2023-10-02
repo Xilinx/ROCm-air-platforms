@@ -10,10 +10,7 @@
 
 #define MAX_BUF_OBJ_ID 0xFFFF
 
-enum bo_heap_type {
-	BO_HEAP_TYPE_BRAM,
-	BO_HEAP_TYPE_DRAM
-};
+enum bo_heap_type { BO_HEAP_TYPE_BRAM, BO_HEAP_TYPE_DRAM };
 
 /**
  * struct amdair_buf_object - Buffer object for tracking heap allocations to

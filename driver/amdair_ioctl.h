@@ -101,16 +101,16 @@ struct amdair_free_device_memory_args {
 
 #define AMDAIR_IOC_GET_VERSION AMDAIR_IOR(0x01, struct amdair_get_version_args)
 
-#define AMDAIR_IOC_CREATE_QUEUE \
+#define AMDAIR_IOC_CREATE_QUEUE                                                \
 	AMDAIR_IOWR(0x02, struct amdair_create_queue_args)
 
-#define AMDAIR_IOC_DESTROY_QUEUE \
+#define AMDAIR_IOC_DESTROY_QUEUE                                               \
 	AMDAIR_IOWR(0x03, struct amdair_destroy_queue_args)
 
-#define AMDAIR_IOC_ALLOC_DEVICE_MEMORY \
+#define AMDAIR_IOC_ALLOC_DEVICE_MEMORY                                         \
 	AMDAIR_IOWR(0x04, struct amdair_alloc_device_memory_args)
 
-#define AMDAIR_IOC_FREE_DEVICE_MEMORY \
+#define AMDAIR_IOC_FREE_DEVICE_MEMORY                                          \
 	AMDAIR_IOWR(0x05, struct amdair_free_device_memory_args)
 
 #endif /* AMDAIR_IOCTL_H_ */

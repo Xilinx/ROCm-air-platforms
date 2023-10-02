@@ -9,9 +9,7 @@
 #include "amdair_object.h"
 #include "vck5000.h"
 
-struct amdair_aie_info aie_info = {
-	.num_aie_devs = 0
-};
+struct amdair_aie_info aie_info = { .num_aie_devs = 0 };
 
 int amdair_device_init(struct amdair_device *air_dev,
 		       enum amdair_device_type dev_type)

@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-
 #include "unistd.h"
 #include <cstdint>
 #include <cstring>
@@ -59,7 +58,7 @@ extern "C" {
 #define HIGH_ADDR(addr) ((addr & 0xffffffff00000000ULL) >> 32)
 #define LOW_ADDR(addr) (addr & 0x00000000ffffffffULL)
 
-#define ALIGN(_x, _size) (((_x) + (_size-1)) & ~(_size-1))
+#define ALIGN(_x, _size) (((_x) + (_size - 1)) & ~(_size - 1))
 
 #define LOGICAL_HERD_DMAS 16
 
@@ -222,9 +221,7 @@ static inline u32 in32(u64 Addr) {
 /*
   write 32 bit value to specified address
 */
-static inline void out32(u64 Addr, u32 Value) {
-  IO_WRITE32(Addr, Value);
-}
+static inline void out32(u64 Addr, u32 Value) { IO_WRITE32(Addr, Value); }
 
 u32 maskpoll32(u64 Addr, u32 Mask, u32 Value, u32 TimeOut) {
   u32 Ret = 1;
@@ -1054,7 +1051,8 @@ void handle_packet_segment_initialize(hsa_agent_dispatch_packet_t *pkt) {
   }
 }
 
-void handle_packet_get_capabilities(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
+void handle_packet_get_capabilities(hsa_agent_dispatch_packet_t *pkt,
+                                    uint32_t mb_id) {
   // packet is in active phase
   packet_set_active(pkt, true);
   uint64_t *addr = (uint64_t *)(pkt->return_address);
@@ -1146,32 +1144,32 @@ void handle_packet_get_info(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
 
 #ifdef ARM_CONTROLLER
 
-/* Hardcoded . If the platform memory map changes 
+/* Hardcoded . If the platform memory map changes
 these will have to change */
 uint64_t ernic_0_base = 0x0000020100080000UL;
 uint64_t ernic_1_base = 0x00000201000C0000UL;
 
-/* Used for the device controller to poll on an 
-incoming RDMA SEND, and copy the payload to some 
+/* Used for the device controller to poll on an
+incoming RDMA SEND, and copy the payload to some
 buffer in memory */
 void handle_packet_rdma_post_recv(hsa_agent_dispatch_packet_t *pkt) {
 
   // Need to do this before processing the packet
-  packet_set_active(pkt,true);
+  packet_set_active(pkt, true);
 
   // Parsing the packet
   uint64_t local_physical_address = pkt->arg[0];
-  uint8_t  qpid                 = pkt->arg[1] & 0xFF;
-  //uint8_t  tag                  = (pkt->arg[1] >> 8)  & 0xFF; // Currently don't use tag
-  uint32_t length               = (pkt->arg[1] >> 16) & 0xFFFF;
-  uint8_t  ernic_sel            = (pkt->arg[1] >> 48) & 0xFF;
+  uint8_t qpid = pkt->arg[1] & 0xFF;
+  // uint8_t  tag                  = (pkt->arg[1] >> 8)  & 0xFF; // Currently
+  // don't use tag
+  uint32_t length = (pkt->arg[1] >> 16) & 0xFFFF;
+  uint8_t ernic_sel = (pkt->arg[1] >> 48) & 0xFF;
 
-  // Pointing to the proper ERNIC 
+  // Pointing to the proper ERNIC
   volatile uint32_t *ernic_csr = NULL;
-  if(ernic_sel == 0) {
+  if (ernic_sel == 0) {
     ernic_csr = (volatile uint32_t *)ernic_0_base;
-  }
-  else {
+  } else {
     ernic_csr = (volatile uint32_t *)ernic_1_base;
   }
 
@@ -1184,23 +1182,26 @@ void handle_packet_rdma_post_recv(hsa_agent_dispatch_packet_t *pkt) {
   air_printf("\ternic_sel: 0x%x\r\n", ernic_sel);
 
   // Determine base address of the RQ to read the RQE
-  uint32_t rq_base_address_low    = ernic_csr[ERNIC_QP_ADDR(qpid, RQBAi)];
-  uint32_t rq_base_address_high   = ernic_csr[ERNIC_QP_ADDR(qpid, RQBAMSBi)];
-  uint64_t rq_base_address        = (((uint64_t)rq_base_address_high) << 32) | ((uint64_t)rq_base_address_low);
+  uint32_t rq_base_address_low = ernic_csr[ERNIC_QP_ADDR(qpid, RQBAi)];
+  uint32_t rq_base_address_high = ernic_csr[ERNIC_QP_ADDR(qpid, RQBAMSBi)];
+  uint64_t rq_base_address = (((uint64_t)rq_base_address_high) << 32) |
+                             ((uint64_t)rq_base_address_low);
   air_printf("\trq_base_address: 0x%lx\r\n", rq_base_address);
 
   // Wait for RQPIDB to be greater than RQCIDB
   uint32_t rq_ci_db = ernic_csr[ERNIC_QP_ADDR(qpid, RQCIi)];
   uint32_t rq_pi_db = ernic_csr[ERNIC_QP_ADDR(qpid, STATRQPIDBi)];
-  air_printf("Polling onon rq_pi_db to be greater than 0x%x. Read: 0x%x\r\n", rq_ci_db, rq_pi_db);
-  while(rq_pi_db <= rq_ci_db) {
-      rq_pi_db = ernic_csr[ERNIC_QP_ADDR(qpid, STATRQPIDBi)];
+  air_printf("Polling onon rq_pi_db to be greater than 0x%x. Read: 0x%x\r\n",
+             rq_ci_db, rq_pi_db);
+  while (rq_pi_db <= rq_ci_db) {
+    rq_pi_db = ernic_csr[ERNIC_QP_ADDR(qpid, STATRQPIDBi)];
   }
   air_printf("Observed aSEND. Copying to local buffer\r\n");
 
   // Copy what RQ PIDB is pointing at to local_physical_address
   void *rqe = (void *)(rq_base_address + (rq_pi_db - 1) * RQE_SIZE);
-  air_printf("rqe is at %p and copying to 0x%lx\r\n", rqe, local_physical_address);
+  air_printf("rqe is at %p and copying to 0x%lx\r\n", rqe,
+             local_physical_address);
   memcpy((size_t *)local_physical_address, (size_t *)rqe, length);
 
   // Increment RQ CIDB so it knows that it can overwrite it
@@ -1218,18 +1219,17 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
   // Parsing the packet
   uint64_t remote_virtual_address = pkt->arg[0];
   uint64_t local_physical_address = pkt->arg[1];
-  uint32_t length                 = pkt->arg[2] & 0xFFFF;
-  uint8_t  op                     = (pkt->arg[2] >> 32) & 0xFF;
-  uint8_t  key                    = (pkt->arg[2] >> 40) & 0xFF;
-  uint8_t  qpid                   = (pkt->arg[2] >> 48) & 0xFF;
-  uint8_t  ernic_sel              = (pkt->arg[2] >> 56) & 0xFF;
+  uint32_t length = pkt->arg[2] & 0xFFFF;
+  uint8_t op = (pkt->arg[2] >> 32) & 0xFF;
+  uint8_t key = (pkt->arg[2] >> 40) & 0xFF;
+  uint8_t qpid = (pkt->arg[2] >> 48) & 0xFF;
+  uint8_t ernic_sel = (pkt->arg[2] >> 56) & 0xFF;
 
-  // Pointing to the proper ERNIC 
+  // Pointing to the proper ERNIC
   volatile uint32_t *ernic_csr = NULL;
-  if(ernic_sel == 0) {
+  if (ernic_sel == 0) {
     ernic_csr = (volatile uint32_t *)ernic_0_base;
-  }
-  else {
+  } else {
     ernic_csr = (volatile uint32_t *)ernic_1_base;
   }
 
@@ -1244,9 +1244,10 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
   air_printf("\tqpid: 0x%x\r\n", qpid);
   air_printf("\ternic_sel: 0x%x\r\n", ernic_sel);
 
-  uint32_t sq_base_address_low    = ernic_csr[ERNIC_QP_ADDR(qpid, SQBAi)];
-  uint32_t sq_base_address_high   = ernic_csr[ERNIC_QP_ADDR(qpid, SQBAMSBi)];
-  uint64_t sq_base_address        = (((uint64_t)sq_base_address_high) << 32) | ((uint64_t)sq_base_address_low);
+  uint32_t sq_base_address_low = ernic_csr[ERNIC_QP_ADDR(qpid, SQBAi)];
+  uint32_t sq_base_address_high = ernic_csr[ERNIC_QP_ADDR(qpid, SQBAMSBi)];
+  uint64_t sq_base_address = (((uint64_t)sq_base_address_high) << 32) |
+                             ((uint64_t)sq_base_address_low);
   air_printf("\tsq_base_address: 0x%lx\r\n", sq_base_address);
 
   // Read the doorbell to determine where to put the WQE
@@ -1254,24 +1255,25 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
   air_printf("\tsq_pi_db: 0x%x\r\n", sq_pi_db);
 
   // Write the WQE to the SQ
-  struct pcie_ernic_wqe *wqe = &(((struct pcie_ernic_wqe *)(sq_base_address))[sq_pi_db]);
+  struct pcie_ernic_wqe *wqe =
+      &(((struct pcie_ernic_wqe *)(sq_base_address))[sq_pi_db]);
   air_printf("Starting writing WQE to %p\r\n", wqe);
-  wqe->wrid           = 0xe0a6 & 0x0000FFFF; // Just hardcoding the ID for now
-  wqe->laddr_lo       = (uint32_t)(local_physical_address & 0x00000000FFFFFFFF);
-  wqe->laddr_hi       = (uint32_t)(local_physical_address >> 32);
-  wqe->length         = length;
-  wqe->op             = op & 0x000000FF;
-  wqe->offset_lo      = (uint32_t)(remote_virtual_address & 0x00000000FFFFFFFF);
-  wqe->offset_hi      = (uint32_t)(remote_virtual_address >> 32);
-  wqe->rtag           = key;
+  wqe->wrid = 0xe0a6 & 0x0000FFFF; // Just hardcoding the ID for now
+  wqe->laddr_lo = (uint32_t)(local_physical_address & 0x00000000FFFFFFFF);
+  wqe->laddr_hi = (uint32_t)(local_physical_address >> 32);
+  wqe->length = length;
+  wqe->op = op & 0x000000FF;
+  wqe->offset_lo = (uint32_t)(remote_virtual_address & 0x00000000FFFFFFFF);
+  wqe->offset_hi = (uint32_t)(remote_virtual_address >> 32);
+  wqe->rtag = key;
   wqe->send_data_dw_0 = 0;
   wqe->send_data_dw_1 = 0;
   wqe->send_data_dw_2 = 0;
   wqe->send_data_dw_3 = 0;
-  wqe->immdt_data     = 0;
-  wqe->reserved_1     = 0;
-  wqe->reserved_2     = 0;
-  wqe->reserved_3     = 0;
+  wqe->immdt_data = 0;
+  wqe->reserved_1 = 0;
+  wqe->reserved_2 = 0;
+  wqe->reserved_3 = 0;
   air_printf("Done writing WQE\r\n");
 
   // Ring the doorbell
@@ -1279,14 +1281,16 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
 
   // Poll on the completion
   uint32_t cq_ci_db = ernic_csr[ERNIC_QP_ADDR(qpid, CQHEADi)];
-  while(cq_ci_db != (sq_pi_db + 1) ) {
-      air_printf("Polling on on CQHEADi to be 0x%x. Read: 0x%x\r\n", sq_pi_db + 1, cq_ci_db);
-      cq_ci_db = ernic_csr[ERNIC_QP_ADDR(qpid, CQHEADi)];
+  while (cq_ci_db != (sq_pi_db + 1)) {
+    air_printf("Polling on on CQHEADi to be 0x%x. Read: 0x%x\r\n", sq_pi_db + 1,
+               cq_ci_db);
+    cq_ci_db = ernic_csr[ERNIC_QP_ADDR(qpid, CQHEADi)];
   }
 }
 #endif
 
-void handle_packet_read_write_aie_reg32(hsa_agent_dispatch_packet_t *pkt, bool is_write) {
+void handle_packet_read_write_aie_reg32(hsa_agent_dispatch_packet_t *pkt,
+                                        bool is_write) {
 
   packet_set_active(pkt, true);
   uint64_t address = pkt->arg[0];
@@ -1394,7 +1398,7 @@ void handle_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt) {
     // reset the column
     aie_reset_column(c);
   }
-  
+
   // copy
   uint32_t ret = cdma_sg_start_sync(0, idx);
   if (ret) {
@@ -1742,11 +1746,13 @@ int stage_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint32_t slot,
   }
 }
 
-void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
+void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id,
+                                  int queue_id) {
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   uint64_t local_read_index = amd_queue->read_dispatch_id;
   hsa_agent_dispatch_packet_t *pkt_buf(
-      reinterpret_cast<hsa_agent_dispatch_packet_t*>(hsa_csr->queue_bufs[queue_id]));
+      reinterpret_cast<hsa_agent_dispatch_packet_t *>(
+          hsa_csr->queue_bufs[queue_id]));
   hsa_agent_dispatch_packet_t *pkt(
       &pkt_buf[local_read_index % amd_queue->hsa_queue.size]);
 
@@ -1933,12 +1939,14 @@ void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int qu
   *rd_id += packets_processed;
 }
 
-void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
+void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id,
+                               int queue_id) {
 
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   uint64_t local_read_index = amd_queue->read_dispatch_id;
   hsa_barrier_and_packet_t *pkt_buf(
-      reinterpret_cast<hsa_barrier_and_packet_t*>(hsa_csr->queue_bufs[queue_id]));
+      reinterpret_cast<hsa_barrier_and_packet_t *>(
+          hsa_csr->queue_bufs[queue_id]));
   hsa_barrier_and_packet_t *pkt(
       &pkt_buf[local_read_index % amd_queue->hsa_queue.size]);
 
@@ -1955,11 +1963,16 @@ void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue
   //  *)(pkt->dep_signal[i]));
   // unlock_uart(mb_id);
 
-  while ( hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
-          hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
-          hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
-          hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
-          hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0) {
+  while (hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
+                                   HSA_WAIT_STATE_ACTIVE) != 0 ||
+         hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
+                                   HSA_WAIT_STATE_ACTIVE) != 0 ||
+         hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
+                                   HSA_WAIT_STATE_ACTIVE) != 0 ||
+         hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
+                                   HSA_WAIT_STATE_ACTIVE) != 0 ||
+         hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
+                                   HSA_WAIT_STATE_ACTIVE) != 0) {
     lock_uart(mb_id);
     air_printf("MB %d : barrier AND packet completion signal timeout!\n\r",
                mb_id);
@@ -1971,15 +1984,15 @@ void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue
 
   complete_barrier_packet(pkt);
   *rd_id += 1;
-
 }
 
-void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
+void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t mb_id,
+                              int queue_id) {
 
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   uint64_t local_read_index = amd_queue->read_dispatch_id;
-  hsa_barrier_or_packet_t *pkt_buf(
-      reinterpret_cast<hsa_barrier_or_packet_t*>(hsa_csr->queue_bufs[queue_id]));
+  hsa_barrier_or_packet_t *pkt_buf(reinterpret_cast<hsa_barrier_or_packet_t *>(
+      hsa_csr->queue_bufs[queue_id]));
   hsa_barrier_or_packet_t *pkt(
       &pkt_buf[local_read_index % amd_queue->hsa_queue.size]);
 
@@ -1996,12 +2009,17 @@ void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_
   //  *)(pkt->dep_signal[i]));
   // unlock_uart(mb_id);
 
-  while ( hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
-          hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
-          hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
-          hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
-          hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0) {
- 
+  while (hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
+                                   HSA_WAIT_STATE_ACTIVE) != 0 &&
+         hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
+                                   HSA_WAIT_STATE_ACTIVE) != 0 &&
+         hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
+                                   HSA_WAIT_STATE_ACTIVE) != 0 &&
+         hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
+                                   HSA_WAIT_STATE_ACTIVE) != 0 &&
+         hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000,
+                                   HSA_WAIT_STATE_ACTIVE) != 0) {
+
     lock_uart(mb_id);
     air_printf("MB %d : barrier OR packet completion signal timeout!\n\r",
                mb_id);
@@ -2073,24 +2091,24 @@ int main() {
   int admin_queue_id(0);
   amd_queue_t *admin_queue(hsa_csr->amd_aql_queues[admin_queue_id]);
   admin_queue->hsa_queue.size = 64;
-  volatile uint64_t *admin_doorbell(reinterpret_cast<uint64_t*>(
-      hsa_csr->doorbells[admin_queue_id]));
+  volatile uint64_t *admin_doorbell(
+      reinterpret_cast<uint64_t *>(hsa_csr->doorbells[admin_queue_id]));
   volatile uint64_t *admin_rd_id(&admin_queue->read_dispatch_id);
   volatile uint64_t *admin_wr_id(&admin_queue->write_dispatch_id);
   hsa_agent_dispatch_packet_t *admin_queue_buf(
-      reinterpret_cast<hsa_agent_dispatch_packet_t*>(
+      reinterpret_cast<hsa_agent_dispatch_packet_t *>(
           hsa_csr->queue_bufs[admin_queue_id]));
   hsa_agent_dispatch_packet_t *admin_pkt(nullptr);
   uint64_t admin_last_doorbell(std::numeric_limits<uint64_t>::max());
 
   int hqd_id(1);
   amd_queue_t *amd_queue(hsa_csr->amd_aql_queues[hqd_id]);
-  volatile uint64_t *doorbell(reinterpret_cast<uint64_t*>(
-      hsa_csr->doorbells[hqd_id]));
+  volatile uint64_t *doorbell(
+      reinterpret_cast<uint64_t *>(hsa_csr->doorbells[hqd_id]));
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   volatile uint64_t *wr_id(&amd_queue->write_dispatch_id);
   hsa_agent_dispatch_packet_t *queue_buf(
-      reinterpret_cast<hsa_agent_dispatch_packet_t*>(
+      reinterpret_cast<hsa_agent_dispatch_packet_t *>(
           hsa_csr->queue_bufs[hqd_id]));
   hsa_agent_dispatch_packet_t *aql_pkt(nullptr);
   uint64_t last_doorbell(std::numeric_limits<uint64_t>::max());
@@ -2111,13 +2129,13 @@ int main() {
       uint32_t type(static_cast<uint32_t>(admin_pkt->header) & 0xffU);
 
       switch (type) {
-        case HSA_PACKET_TYPE_AGENT_DISPATCH:
-          handle_agent_dispatch_packet(admin_queue, mb_id, admin_queue_id);
-          break;
-        default:
-          air_printf("Unsupported admin queue packet type: %u\n\r", type);
-          ++(*admin_rd_id);
-          break;
+      case HSA_PACKET_TYPE_AGENT_DISPATCH:
+        handle_agent_dispatch_packet(admin_queue, mb_id, admin_queue_id);
+        break;
+      default:
+        air_printf("Unsupported admin queue packet type: %u\n\r", type);
+        ++(*admin_rd_id);
+        break;
       }
     }
 
@@ -2130,48 +2148,51 @@ int main() {
       air_printf("Doorbell rung %llu\n\r", *doorbell);
       air_printf("Packet type %u, func type %u, pkt data %llx\n\r", type, func,
                  aql_pkt->arg[0]);
-      air_printf("queue heap addr %llx\n\r", hsa_csr->queue_dram_cpu_va[hqd_id]);
+      air_printf("queue heap addr %llx\n\r",
+                 hsa_csr->queue_dram_cpu_va[hqd_id]);
 
       uint32_t invalid_count = 0;
       while (type == HSA_PACKET_TYPE_INVALID) {
-          aql_pkt = &queue_buf[*rd_id % amd_queue->hsa_queue.size];
-          type = aql_pkt->header & 0xff;
-          type = static_cast<uint32_t>(aql_pkt->header) & 0xffU;
-          func = static_cast<uint32_t>(aql_pkt->type) & 0xffffU;
+        aql_pkt = &queue_buf[*rd_id % amd_queue->hsa_queue.size];
+        type = aql_pkt->header & 0xff;
+        type = static_cast<uint32_t>(aql_pkt->header) & 0xffU;
+        func = static_cast<uint32_t>(aql_pkt->type) & 0xffffU;
 
-          // TODO: Come back to this for the multi-prodcer queue as we can hit this
-          invalid_count++;
-          if(invalid_count > INVLD_COUNT_TIMEOUT) {
-            xil_printf("[WARNING] We are stuck in an invalid packet and timed out. Breaking\r\n");
-            xil_printf("\theader: 0x%x\r\n", aql_pkt->header);
-            xil_printf("\ttype: 0x%x\r\n", type);
-            xil_printf("\tfunc: 0x%x\r\n", func);
-            xil_printf("\trd_id: 0x%x\r\n", *rd_id);
-            xil_printf("\tdoorbell: 0x%x\r\n", *doorbell);
-            break;
-          }
+        // TODO: Come back to this for the multi-prodcer queue as we can hit
+        // this
+        invalid_count++;
+        if (invalid_count > INVLD_COUNT_TIMEOUT) {
+          xil_printf("[WARNING] We are stuck in an invalid packet and timed "
+                     "out. Breaking\r\n");
+          xil_printf("\theader: 0x%x\r\n", aql_pkt->header);
+          xil_printf("\ttype: 0x%x\r\n", type);
+          xil_printf("\tfunc: 0x%x\r\n", func);
+          xil_printf("\trd_id: 0x%x\r\n", *rd_id);
+          xil_printf("\tdoorbell: 0x%x\r\n", *doorbell);
+          break;
+        }
       }
 
       switch (type) {
-        case HSA_PACKET_TYPE_AGENT_DISPATCH:
-          air_printf("Dispatching agent dispatch packet\n\r");
-          handle_agent_dispatch_packet(amd_queue, mb_id, hqd_id);
-          break;
-        case HSA_PACKET_TYPE_BARRIER_AND:
-          air_printf("Executing barrier and packet\r\n");
-          handle_barrier_and_packet(amd_queue, mb_id, hqd_id);
-          break;
-        case HSA_PACKET_TYPE_BARRIER_OR:
-          air_printf("Executing barrier or packet\r\n");
-          handle_barrier_or_packet(amd_queue, mb_id, hqd_id);
-          break;
-        // We are already handling the invalid packet above
-        case HSA_PACKET_TYPE_INVALID:
-          break;
-        default:
-          air_printf("Unsupported packet type\n\r");
-          ++(*rd_id);
-          break;
+      case HSA_PACKET_TYPE_AGENT_DISPATCH:
+        air_printf("Dispatching agent dispatch packet\n\r");
+        handle_agent_dispatch_packet(amd_queue, mb_id, hqd_id);
+        break;
+      case HSA_PACKET_TYPE_BARRIER_AND:
+        air_printf("Executing barrier and packet\r\n");
+        handle_barrier_and_packet(amd_queue, mb_id, hqd_id);
+        break;
+      case HSA_PACKET_TYPE_BARRIER_OR:
+        air_printf("Executing barrier or packet\r\n");
+        handle_barrier_or_packet(amd_queue, mb_id, hqd_id);
+        break;
+      // We are already handling the invalid packet above
+      case HSA_PACKET_TYPE_INVALID:
+        break;
+      default:
+        air_printf("Unsupported packet type\n\r");
+        ++(*rd_id);
+        break;
       }
     }
     shell();

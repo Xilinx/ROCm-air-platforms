@@ -6,8 +6,8 @@
 
 #include <linux/bitmap.h>
 
-#define MAX_HW_QUEUES		16
-#define QUEUE_INVALID_ID	0xFFFFFFFFU
+#define MAX_HW_QUEUES 16
+#define QUEUE_INVALID_ID 0xFFFFFFFFU
 
 struct amdair_device;
 

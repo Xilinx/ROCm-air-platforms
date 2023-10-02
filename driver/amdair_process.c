@@ -36,16 +36,16 @@ int amdair_process_device_create_bo_handle(struct amdair_process_device *air_pd,
 		interval_tree_insert(&air_bo->it_node, &air_pd->dram_heap);
 	}
 
-	*handle = idr_alloc(&air_pd->alloc_idr, air_bo, 0,
-			    MAX_BUF_OBJ_ID + 1, GFP_KERNEL);
+	*handle = idr_alloc(&air_pd->alloc_idr, air_bo, 0, MAX_BUF_OBJ_ID + 1,
+			    GFP_KERNEL);
 	if (*handle < 0)
 		return *handle;
 
 	return 0;
 }
 
-int amdair_process_device_destroy_bo_handle(struct amdair_process_device *air_pd,
-					    int handle)
+int amdair_process_device_destroy_bo_handle(
+	struct amdair_process_device *air_pd, int handle)
 {
 	struct amdair_buf_object *air_bo = NULL;
 
@@ -56,8 +56,7 @@ int amdair_process_device_destroy_bo_handle(struct amdair_process_device *air_pd
 
 	if (air_bo) {
 		idr_remove(&air_pd->alloc_idr, handle);
-		interval_tree_remove(&air_bo->it_node,
-				     &air_pd->dram_heap);
+		interval_tree_remove(&air_bo->it_node, &air_pd->dram_heap);
 		amdair_mman_free_dram(&air_pd->dev->mman, air_bo);
 	} else {
 		return -EINVAL;
@@ -66,8 +65,8 @@ int amdair_process_device_destroy_bo_handle(struct amdair_process_device *air_pd
 	return 0;
 }
 
-struct amdair_buf_object* amdair_process_device_find_bo(
-	struct amdair_process_device *air_pd, int handle)
+struct amdair_buf_object *
+amdair_process_device_find_bo(struct amdair_process_device *air_pd, int handle)
 {
 	if (handle < 0)
 		return NULL;
@@ -163,8 +162,7 @@ int amdair_process_assign_doorbell(struct amdair_process *air_process,
 	struct amdair_device *air_dev = NULL;
 	int ret = 0;
 
-	ret = amdair_process_get_process_device(air_process, dev_id,
-						&air_pd);
+	ret = amdair_process_get_process_device(air_process, dev_id, &air_pd);
 
 	if (ret)
 		goto err_no_dev;
@@ -180,8 +178,7 @@ int amdair_process_assign_doorbell(struct amdair_process *air_process,
 
 	dev_info(&air_dev->pdev->dev, "Assigning doorbell page %u",
 		 air_pd->db_page_id);
-	*db_id = find_first_zero_bit(air_pd->doorbell_id_map,
-				     air_pd->num_dbs);
+	*db_id = find_first_zero_bit(air_pd->doorbell_id_map, air_pd->num_dbs);
 
 	if (*db_id == air_pd->num_dbs) {
 		ret = -ENOSPC;
@@ -198,11 +195,11 @@ err_no_dev:
 }
 
 int amdair_process_doorbell_release(struct amdair_process *air_process,
-				     uint32_t dev_id, uint32_t db_id)
+				    uint32_t dev_id, uint32_t db_id)
 {
 	struct amdair_process_device *air_pd = NULL;
-	int ret = amdair_process_get_process_device(air_process, dev_id,
-						    &air_pd);
+	int ret =
+		amdair_process_get_process_device(air_process, dev_id, &air_pd);
 	if (ret)
 		return ret;
 	clear_bit(db_id, air_pd->doorbell_id_map);

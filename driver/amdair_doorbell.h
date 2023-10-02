@@ -5,8 +5,8 @@
 
 struct amdair_device;
 
-#define MAX_HW_DOORBELL_PAGES	16
-#define DOORBELL_INVALID_ID	0xFFFFFFFFU
+#define MAX_HW_DOORBELL_PAGES 16
+#define DOORBELL_INVALID_ID 0xFFFFFFFFU
 
 /**
  * struct amdair_doorbell - Holds information about a device's doorbell

@@ -8,8 +8,8 @@
 #ifndef __PLATFORM_H_
 #define __PLATFORM_H_
 
-#include <cstdint>
 #include "hsa.h"
+#include <cstdint>
 
 extern "C" {
 #ifdef ARM_CONTROLLER
