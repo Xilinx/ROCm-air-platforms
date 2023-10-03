@@ -97,28 +97,24 @@ air_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint16_t herd_id, uint8_t
 */
 hsa_status_t air_load_airbin(hsa_agent_t agent, hsa_queue_t *q,
                              const char *filename, uint8_t column) {
-  hsa_status_t ret = HSA_STATUS_SUCCESS;
-  int elf_fd = 0;
   uint8_t *dram_ptr = NULL;
   uint8_t *data_ptr = NULL;
   Elf *inelf = NULL;
   GElf_Ehdr *ehdr = NULL;
   GElf_Ehdr ehdr_mem;
   uint64_t wr_idx = 0;
-  hsa_agent_dispatch_packet_t pkt;
-  size_t shnum;
   uint32_t table_idx = 0;
   airbin_table_entry *airbin_table;
   uint32_t data_offset = 0;
   uint32_t table_size = 0;
-  struct stat elf_stat;
 
   // The starting colums of the DUs on the VCK5000 are: 2, 10, 18, 26, 34, and 42
   if (!std::set {2, 10, 18, 26, 34, 42}.contains(column))
     return HSA_STATUS_ERROR_INVALID_ARGUMENT;
 
   // open the AIRBIN file
-  elf_fd = open(filename, O_RDONLY);
+  int elf_fd = open(filename, O_RDONLY);
+  hsa_status_t ret = HSA_STATUS_SUCCESS;
   if (elf_fd < 0) {
     std::cerr << "Can't open " << filename << std::endl;
     ret = HSA_STATUS_ERROR_INVALID_FILE;
@@ -126,6 +122,7 @@ hsa_status_t air_load_airbin(hsa_agent_t agent, hsa_queue_t *q,
   }
 
   // calculate the size needed to load
+  struct stat elf_stat;
   fstat(elf_fd, &elf_stat);
   if (table_size > binary_region_size) {
     std::cerr << "Table size is larger than allocated DRAM. Exiting\n" << std::endl;
@@ -160,6 +157,7 @@ hsa_status_t air_load_airbin(hsa_agent_t agent, hsa_queue_t *q,
     goto err_elf_read;
   }
 
+  size_t shnum;
   if (elf_getshdrnum(inelf, &shnum) != 0) {
     std::cerr << "cannot get program header count: " << elf_errmsg(-1) << std::endl;
     ret = HSA_STATUS_ERROR_INVALID_FILE;
@@ -223,6 +221,7 @@ hsa_status_t air_load_airbin(hsa_agent_t agent, hsa_queue_t *q,
 
   // Send configuration packet
   wr_idx = hsa_queue_add_write_index_relaxed(q, 1);
+  hsa_agent_dispatch_packet_t pkt;
   air_packet_load_airbin(&pkt, (uint64_t)airbin_table, (uint16_t)column);
 
   // dispatch and wait has blocking semantics so we can internally create the signal
