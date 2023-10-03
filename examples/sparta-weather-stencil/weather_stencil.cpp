@@ -54,7 +54,7 @@ hsa_amd_memory_pool_t global_mem_pool;
 hsa_status_t air_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt,
                                     uint64_t table, uint16_t column) {
   pkt->type = air::pkt::type::airbin;
-  pkt->header = (HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE);
+  pkt->header = HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE;
   pkt->arg[0] = table;
   pkt->arg[1] = column;
 
@@ -87,7 +87,7 @@ air_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint16_t herd_id, uint8_t
   pkt->arg[3] |= ((uint64_t)transfer_stride4d) << 48;
 
   pkt->type = air::pkt::type::nd_memcpy;
-  pkt->header = (HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE);
+  pkt->header = HSA_PACKET_TYPE_AGENT_DISPATCH << HSA_PACKET_HEADER_TYPE;
 
   return HSA_STATUS_SUCCESS;
 }
