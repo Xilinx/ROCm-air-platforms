@@ -358,16 +358,6 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  // Allocating some device memory
-  uint32_t *ddr_ptr_out_0 = NULL;
-  uint32_t *ddr_ptr_out_1 = NULL;
-  uint32_t *ddr_ptr_out_2 = NULL;
-  uint32_t *ddr_ptr_out_3 = NULL;
-  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_out * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_0);
-  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_out * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_1);
-  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_out * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_2);
-  hsa_amd_memory_pool_allocate(global_mem_pool, dma_count_out * sizeof(uint32_t), 0, (void **)&ddr_ptr_out_3);
-
   // Allocate and initialize the input buffers with some device memory
   auto allocate_and_init_input_buffer = [&] {
     uint32_t *ddr_ptr_in;
@@ -384,23 +374,33 @@ int main(int argc, char *argv[]) {
   auto ddr_ptr_in_3 = allocate_and_init_input_buffer();
 
   // Make sure data was written to the device correctly
-  for(int i = 0; i < DMA_COUNT_IN; i++) {
-    if(ddr_ptr_in_0[i] != i || ddr_ptr_in_1[i] != i || ddr_ptr_in_2[i] != i || ddr_ptr_in_3[i] != i) {
-      std::cerr << "[ERROR] Input buffer was not written to correctly\n" << std::endl;
-      hsa_queue_destroy(queues.front());
+  for (int i = 0; i < dma_count_in; i++) {
+    if (ddr_ptr_in_0[i] != i || ddr_ptr_in_1[i] != i || ddr_ptr_in_2[i] != i ||
+        ddr_ptr_in_3[i] != i) {
+      std::cerr << "[ERROR] Input buffer was not written to correctly\n"
+                << std::endl;
+      hsa_queue_destroy(queue);
       hsa_shut_down();
       return -1;
     }
   }
 
-  std::vector<int> out_v(dma_count_out);
-  std::fill(std::begin(out_v), std::end(out_v), 0); // Fill with 0
-  std::copy(out_v.begin(), out_v.end(), ddr_ptr_out_0);
-  std::copy(out_v.begin(), out_v.end(), ddr_ptr_out_1);
-  std::copy(out_v.begin(), out_v.end(), ddr_ptr_out_2);
-  std::copy(out_v.begin(), out_v.end(), ddr_ptr_out_3);
+  // Allocate and initialize the output buffers with some device memory
+  auto allocate_and_init_output_buffer = [&] {
+    uint32_t *ddr_ptr_out;
+    hsa_amd_memory_pool_allocate(global_mem_pool,
+                                 dma_count_in * sizeof(uint32_t), 0,
+                                 (void **)&ddr_ptr_out);
+    // Fill with 0
+    std::fill(ddr_ptr_out, ddr_ptr_out + dma_count_in, 0);
+    return ddr_ptr_out;
+  };
+  auto ddr_ptr_out_0 = allocate_and_init_output_buffer();
+  auto ddr_ptr_out_1 = allocate_and_init_output_buffer();
+  auto ddr_ptr_out_2 = allocate_and_init_output_buffer();
+  auto ddr_ptr_out_3 = allocate_and_init_output_buffer();
 
-  // Creating one signal for all DMA packets. 
+  // Creating one signal for all DMA packets.
   // Each packet completion will decrement the signal.
   // Once it reaches zero we will know that all DMAs are complete.
   hsa_signal_t dma_signal;
