@@ -311,9 +311,6 @@ int main(int argc, char *argv[]) {
   // 2, 10, 18, 26, 34, and 42.
   uint64_t starting_col = 2;
 
-  // HSA datastructures
-  std::vector<hsa_agent_t> agents;
-  std::vector<hsa_queue_t *> queues;
   uint32_t aie_max_queue_size(0);
 
   // Initializing HSA
@@ -324,6 +321,7 @@ int main(int argc, char *argv[]) {
   }
 
   // Finding all AIE HSA agents
+  std::vector<hsa_agent_t> agents;
   hsa_iterate_agents(get_aie_agent, reinterpret_cast<void*>(&agents));
   if (agents.empty()) {
     std::cerr << "No AIE HSA agent found!" << std::endl;
@@ -341,10 +339,10 @@ int main(int argc, char *argv[]) {
   hsa_agent_get_info(agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &aie_max_queue_size);
 
   // Creating a queue
-  hsa_queue_t *q = NULL;
+  hsa_queue_t *queue;
   auto queue_create_status = hsa_queue_create(agent, aie_max_queue_size,
                               HSA_QUEUE_TYPE_SINGLE, nullptr, nullptr, 0,
-                              0, &q);
+                              0, &queue);
 
   if (queue_create_status != HSA_STATUS_SUCCESS) {
     std::cerr << "hsa_queue_create failed" << std::endl;
@@ -352,14 +350,11 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  // Adding to our vector of queues
-  queues.push_back(q);
-
   // Configuring the device
-  auto airbin_ret = air_load_airbin(agent, queues.front(), "sparta-1DU.elf", starting_col);
+  auto airbin_ret = air_load_airbin(agent, queue, "sparta-1DU.elf", starting_col);
   if (airbin_ret != HSA_STATUS_SUCCESS) {
     std::cerr << "Loading airbin failed: " << airbin_ret << std::endl;
-    hsa_queue_destroy(queues.front());
+    hsa_queue_destroy(queue);
     hsa_shut_down();
     return -1;
   }
@@ -419,111 +414,111 @@ int main(int argc, char *argv[]) {
   //
   // send the data
   //
-  uint64_t wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
-  uint64_t packet_id = wr_idx % queues.front()->size;
+  uint64_t wr_idx = hsa_queue_add_write_index_relaxed(queue, 1);
+  uint64_t packet_id = wr_idx % queue->size;
   hsa_agent_dispatch_packet_t pkt;
   air_packet_nd_memcpy(&pkt, 0, starting_col, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_0),
                        dma_count_in * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queue->base_address)[packet_id] = pkt;
 
   //
   // read the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
-  packet_id = wr_idx % queues.front()->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queue, 1);
+  packet_id = wr_idx % queue->size;
   hsa_agent_dispatch_packet_t pkt2;
   air_packet_nd_memcpy(&pkt2, 0, starting_col, 0, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_0),
                        dma_count_out * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt2.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt2;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queue->base_address)[packet_id] = pkt2;
 
   //////////////////////////////////////// B Block 1
   //
   // send the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
-  packet_id = wr_idx % queues.front()->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queue, 1);
+  packet_id = wr_idx % queue->size;
   hsa_agent_dispatch_packet_t pkt3;
   air_packet_nd_memcpy(&pkt3, 0, starting_col, 1, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_1),
                        dma_count_in * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt3.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt3;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queue->base_address)[packet_id] = pkt3;
 
   //
   // read the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
-  packet_id = wr_idx % queues.front()->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queue, 1);
+  packet_id = wr_idx % queue->size;
   hsa_agent_dispatch_packet_t pkt4;
   air_packet_nd_memcpy(&pkt4, 0, starting_col, 0, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_1),
                        dma_count_out * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt4.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt4;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queue->base_address)[packet_id] = pkt4;
 
   //////////////////////////////////////// B Block 2
   //
   // send the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
-  packet_id = wr_idx % queues.front()->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queue, 1);
+  packet_id = wr_idx % queue->size;
   hsa_agent_dispatch_packet_t pkt5;
   air_packet_nd_memcpy(&pkt5, 0, starting_col+1, 1, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_2),
                        dma_count_in * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt5.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt5;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queue->base_address)[packet_id] = pkt5;
 
   //
   // read the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
-  packet_id = wr_idx % queues.front()->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queue, 1);
+  packet_id = wr_idx % queue->size;
   hsa_agent_dispatch_packet_t pkt6;
   air_packet_nd_memcpy(&pkt6, 0, starting_col+1, 0, 0, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_2),
                        dma_count_out * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt6.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt6;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queue->base_address)[packet_id] = pkt6;
 
   //////////////////////////////////////// B Block 3
   //
   // send the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
-  packet_id = wr_idx % queues.front()->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queue, 1);
+  packet_id = wr_idx % queue->size;
   hsa_agent_dispatch_packet_t pkt7;
   air_packet_nd_memcpy(&pkt7, 0, starting_col+1, 1, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_in_3),
                        dma_count_in * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt7.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt7;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queue->base_address)[packet_id] = pkt7;
 
   //
   // read the data
   //
 
-  wr_idx = hsa_queue_add_write_index_relaxed(queues.front(), 1);
-  packet_id = wr_idx % queues.front()->size;
+  wr_idx = hsa_queue_add_write_index_relaxed(queue, 1);
+  packet_id = wr_idx % queue->size;
   hsa_agent_dispatch_packet_t pkt8;
   air_packet_nd_memcpy(&pkt8, 0, starting_col+1, 0, 1, 4, 2,
                        reinterpret_cast<uint64_t>(ddr_ptr_out_3),
                        dma_count_out * sizeof(float), 1, 0, 1, 0, 1, 0);
   pkt8.completion_signal = dma_signal;
-  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queues.front()->base_address)[packet_id] = pkt8;
+  reinterpret_cast<hsa_agent_dispatch_packet_t *>(queue->base_address)[packet_id] = pkt8;
 
   // Ringing the doorbell to notify the command processor of the packet
-  hsa_signal_store_screlease(queues.front()->doorbell_signal, wr_idx);
+  hsa_signal_store_screlease(queue->doorbell_signal, wr_idx);
 
   // wait for packet completion
   while (hsa_signal_wait_scacquire(dma_signal,
@@ -556,7 +551,7 @@ int main(int argc, char *argv[]) {
   }
 
   // destroying the queue
-  hsa_queue_destroy(queues.front());
+  hsa_queue_destroy(queue);
   hsa_amd_memory_pool_free((void *)ddr_ptr_in_0);
   hsa_amd_memory_pool_free((void *)ddr_ptr_in_1);
   hsa_amd_memory_pool_free((void *)ddr_ptr_in_2);
