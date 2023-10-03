@@ -311,8 +311,6 @@ int main(int argc, char *argv[]) {
   // 2, 10, 18, 26, 34, and 42.
   uint64_t starting_col = 2;
 
-  uint32_t aie_max_queue_size(0);
-
   // Initializing HSA
   hsa_status_t hsa_ret = hsa_init();
   if (hsa_ret != HSA_STATUS_SUCCESS) {
@@ -336,6 +334,7 @@ int main(int argc, char *argv[]) {
                                      reinterpret_cast<void*>(&global_mem_pool));
 
   // Getting the size of queue the agent supports
+  uint32_t aie_max_queue_size;
   hsa_agent_get_info(agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &aie_max_queue_size);
 
   // Creating a queue
@@ -358,8 +357,6 @@ int main(int argc, char *argv[]) {
     hsa_shut_down();
     return -1;
   }
-
-  int errors = 0;
 
   // Allocating some device memory
   uint32_t *ddr_ptr_in_0 = NULL;
@@ -518,6 +515,7 @@ int main(int argc, char *argv[]) {
   // Destroying the signal
   hsa_signal_destroy(dma_signal);
 
+  int errors = 0;
   for (int i = 0; i < 512; i++) {
     if (ddr_ptr_out_0[i] != 514 + i) {
       std::cerr << "[ERROR] " << ddr_ptr_out_0[i] << " != " << 514 + i << std::endl;
