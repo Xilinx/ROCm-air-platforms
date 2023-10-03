@@ -354,12 +354,6 @@ int main(int argc, char *argv[]) {
 
   // Adding to our vector of queues
   queues.push_back(q);
-  if (queues.size() == 0) {
-    std::cerr << "No queues were sucesfully created!" << std::endl;
-    hsa_queue_destroy(queues.front());
-    hsa_shut_down();
-    return -1;
-  }
 
   // Configuring the device
   auto airbin_ret = air_load_airbin(agent, queues.front(), "sparta-1DU.elf", starting_col);
