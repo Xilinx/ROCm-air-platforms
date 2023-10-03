@@ -205,9 +205,7 @@ hsa_status_t air_load_airbin(hsa_agent_t agent, hsa_queue_t *q,
     }
     memcpy(data_ptr, desc->d_buf, desc->d_size);
 
-    airbin_table[table_idx].offset = data_offset;
-    airbin_table[table_idx].size = shdr.sh_size;
-    airbin_table[table_idx].addr = shdr.sh_addr;
+    airbin_table[table_idx] = { data_offset, uint32_t(shdr.sh_size), shdr.sh_addr };
 
     table_idx++;
     data_offset += shdr.sh_size;
@@ -221,9 +219,7 @@ hsa_status_t air_load_airbin(hsa_agent_t agent, hsa_queue_t *q,
   }
 
   // the last entry must be all 0's
-  airbin_table[table_idx].offset = 0;
-  airbin_table[table_idx].size = 0;
-  airbin_table[table_idx].addr = 0;
+  airbin_table[table_idx]= { 0, 0, 0 };
 
   // Send configuration packet
   wr_idx = hsa_queue_add_write_index_relaxed(q, 1);
