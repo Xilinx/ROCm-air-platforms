@@ -29,10 +29,6 @@ auto constexpr nd_memcpy = 0x0103L;
 auto constexpr airbin = 0x53L;
 } // namespace air::pkt::type
 
-/*
-  Defining the size of memory we allocate to store the AIE configuration
-*/
-constexpr uint64_t binary_region_size = 6 * 1024 * 1024;
 
 /*
   Each entry describes a loadable section in device memory. The device uses
@@ -121,23 +117,7 @@ hsa_status_t air_load_airbin(hsa_agent_t agent, hsa_queue_t *q,
     goto err_elf_open;
   }
 
-  // calculate the size needed to load
-  struct stat elf_stat;
-  fstat(elf_fd, &elf_stat);
-  if (table_size > binary_region_size) {
-    std::cerr << "Table size is larger than allocated DRAM. Exiting\n" << std::endl;
-    ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
-    goto err_elf_open;
-  }
 
-  // get some DRAM from the device
-  hsa_amd_memory_pool_allocate(global_mem_pool, binary_region_size, 0, (void **)&dram_ptr);
-
-  if (dram_ptr == NULL) {
-    std::cerr << "Error allocating " << binary_region_size << " DRAM"<< std::endl;
-    ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
-    goto err_dev_mem_alloc;
-  }
 
   // check the characteristics
   elf_version(EV_CURRENT);
@@ -173,6 +153,20 @@ hsa_status_t air_load_airbin(hsa_agent_t agent, hsa_queue_t *q,
     sections so it seems like a good trade-off.
   */
   table_size = shnum * sizeof(airbin_table_entry);
+
+  // calculate the size needed to load the configuration and allocate that 
+  // amount of device memory
+  struct stat elf_stat;
+  fstat(elf_fd, &elf_stat);
+  hsa_amd_memory_pool_allocate(global_mem_pool, elf_stat.st_size + table_size, 0, (void **)&dram_ptr);
+  if (dram_ptr == NULL) {
+    std::cerr << "Error allocating " << elf_stat.st_size + table_size << " DRAM"<< std::endl;
+    ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
+    goto err_dev_mem_alloc;
+  }
+
+  // Now that we know we have enough space for the data and table, can start
+  // writing to device memory
   airbin_table = (airbin_table_entry *)dram_ptr;
   data_offset = table_size; // The data offset starts at the end of the table
   data_ptr = dram_ptr + table_size;
@@ -208,12 +202,6 @@ hsa_status_t air_load_airbin(hsa_agent_t agent, hsa_queue_t *q,
     table_idx++;
     data_offset += shdr.sh_size;
     data_ptr += shdr.sh_size;
-
-    if (data_offset > binary_region_size) {
-      std::cerr << "[ERROR] Overwriting allocated DRAM size. Exiting\n" << std::endl;
-      ret = HSA_STATUS_ERROR_OUT_OF_RESOURCES;
-      goto err_elf_read;
-    }
   }
 
   // the last entry must be all 0's
