@@ -1,0 +1,30 @@
+Checking output of spatial launch 0
+      ;   :   ;       
+   .   \_,!,_/   ,    
+    `.,'     `.,'     
+     /         \      
+~ -- :  PASS   : -- ~ 
+     \         /      
+    ,'`._   _.'`.     
+   '   / `!` \   `    
+      ;   :   ;       
+Checking output of spatial launch 1
+      ;   :   ;       
+   .   \_,!,_/   ,    
+    `.,'     `.,'     
+     /         \      
+~ -- :  PASS   : -- ~ 
+     \         /      
+    ,'`._   _.'`.     
+   '   / `!` \   `    
+      ;   :   ;       
+Checking output of spatial launch 2
+   __(                  ) 
+  (_      FAIL      __))  
+    ((           __)      
+      (______)--'         
+      _/  /               
+     / __/                
+    / /                   
+   //                     
+  /'                      
