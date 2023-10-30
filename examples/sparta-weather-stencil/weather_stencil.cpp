@@ -252,13 +252,13 @@ hsa_status_t get_aie_agent(hsa_agent_t agent, void *data) {
 
   // Printing what type of agent we found
   if(device_type == HSA_DEVICE_TYPE_CPU) {
-    std::cout << "Found a CPU agent" << std::endl;
+    std::cout << "Found a CPU HSA agent" << std::endl;
   }
   else if(device_type == HSA_DEVICE_TYPE_GPU) {
-    std::cout << "Found a GPU agent" << std::endl;
+    std::cout << "Found a GPU HSA agent" << std::endl;
   }
   else if(device_type == HSA_DEVICE_TYPE_AIE) {
-    std::cout << "Found an AIE agent" << std::endl;
+    std::cout << "Found an AIE HSA agent" << std::endl;
   }
   else {
     std::cout << "[WARNING] Unknown device type found" << std::endl;
