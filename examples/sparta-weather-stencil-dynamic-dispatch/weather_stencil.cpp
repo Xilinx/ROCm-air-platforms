@@ -290,6 +290,20 @@ hsa_status_t get_aie_agent(hsa_agent_t agent, void *data) {
       status != HSA_STATUS_SUCCESS)
     return status;
 
+  // Printing what type of agent we found
+  if(device_type == HSA_DEVICE_TYPE_CPU) {
+    std::cout << "Found a CPU HSA agent" << std::endl;
+  }
+  else if(device_type == HSA_DEVICE_TYPE_GPU) {
+    std::cout << "Found a GPU HSA agent" << std::endl;
+  }
+  else if(device_type == HSA_DEVICE_TYPE_AIE) {
+    std::cout << "Found an AIE HSA agent" << std::endl;
+  }
+  else {
+    std::cout << "[WARNING] Unknown device type found" << std::endl;
+  }
+
   if (device_type == HSA_DEVICE_TYPE_AIE)
     aie_agents->push_back(agent);
 
@@ -338,7 +352,6 @@ int main(int argc, char *argv[]) {
   // DUs start in the following columns:
   // 2, 10, 18, 26, 34, and 42.
   uint64_t starting_col = 2;
-  uint64_t starting_col_two = 10;
 
   uint64_t num_spatial_launches = 6;
 
