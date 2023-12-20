@@ -1585,6 +1585,18 @@ void handle_packet_hello(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
   unlock_uart(mb_id);
 }
 
+void handle_packet_translate(hsa_agent_dispatch_packet_t *pkt) {
+  packet_set_active(pkt, true);
+
+  // Getting information from packet
+  uint64_t va = pkt->arg[0];
+  uint64_t *addr = (uint64_t *)(&pkt->return_address); // FIXME when we can use a VA
+
+  // Translate the VA to a PA and put it in the return address
+  uint64_t pa = translate_virt_to_phys(va);
+  *addr = (uint64_t)pa;
+}
+
 typedef struct staged_nd_memcpy_s {
   uint32_t valid;
   hsa_agent_dispatch_packet_t *pkt;
@@ -1896,6 +1908,12 @@ void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int qu
       break;
     case AIR_PKT_TYPE_XAIE_LOCK:
       handle_packet_xaie_lock(pkt);
+      complete_agent_dispatch_packet(pkt);
+      packets_processed++;
+      break;
+
+    case AIR_PKT_TYPE_TRANSLATE:
+      handle_packet_translate(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
