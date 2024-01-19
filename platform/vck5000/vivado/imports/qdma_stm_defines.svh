@@ -3,7 +3,7 @@
 
 `ifndef QDMA_STM_DEFINES_SVH
     `define QDMA_STM_DEFINES_SVH
- 
+
   typedef logic [511:0]                           mdma_int_tdata_exdes_t;
   typedef logic [10:0]                            mdma_qid_exdes_t;
   typedef logic [15:0]                            mdma_dma_buf_len_exdes_t;
@@ -101,9 +101,9 @@
 
     typedef struct packed {
         mdma_int_tdata_exdes_t    tdata;
-        logic [$bits(mdma_int_tdata_exdes_t)/8 - 1 :0]   par; 
+        logic [$bits(mdma_int_tdata_exdes_t)/8 - 1 :0]   par;
     } mdma_c2h_axis_data_exdes_t;
-    
+
    typedef struct packed {
         logic                                           zero_byte;  //[53]
         logic [5:0]                                     mty;        //[52:47]
@@ -112,9 +112,9 @@
         logic [2:0]                                     port_id;    //[13:11]
         mdma_qid_exdes_t                                qid;        //[10:0]
     } mdma_h2c_axis_tuser_exdes_t;
- 
-   
- 
+
+
+
 
 `define XPREG_NORESET_EXDES(clk,q,d)			    \
     always @(posedge clk)			    \
@@ -137,7 +137,7 @@
              q <= #(TCQ)  d;                \
            `endif                \
           end
- 
+
  `define XSRREG_ASYNC_EXDES(clk, reset_n, q,d,rstval)	\
               always @(posedge clk or negedge reset_n)    \
               begin                    \
@@ -150,14 +150,14 @@
                   q <= #(TCQ)  d;                \
                 `endif                \
                end
- 
+
  `define XLREGS_SYNC_EXDES(clk, reset_n) \
                      always @(posedge clk)
  `define XLREGS_ASYNC_EXDES(clk, reset_n) \
                      always @(posedge clk or negedge reset_n)
- 
-               
- 
+
+
+
 
 `define XSRREG_XDMA_EXDES(clk, reset_n, q,d,rstval)        \
 `ifdef SOFT_IP  \

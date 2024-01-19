@@ -19,9 +19,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-SYSROOT = ../petalinux/build/petalinux/images/linux/sdk/sysroots/cortexa72-cortex53-xilinx-linux
-IMAGE   = ../petalinux/build/petalinux/images/linux/Image
-ROOTFS  = ../petalinux/build/petalinux/images/linux/rootfs.ext4
 VIVADO=$(XILINX_VIVADO)/bin/vivado
 
 
@@ -31,24 +28,7 @@ VIVADO=$(XILINX_VIVADO)/bin/vivado
 ROOT_DIR=$(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 
 
-.PHONY: all pfm prep_sd_dir prep_sw_comp prep_sysroot ultraclean clean sd_card ${XCLBIN} ${HOST_EXE} package 
-
-# Target: sw_comp
-# Copy PetaLinux genreated software components to platform preparation directory
-prep_sd_dir:
-	mkdir -p sd_dir && cp ../petalinux/build/petalinux/images/linux/boot.scr ./sd_dir/
-
-# Target: prep_sw_comp
-# Copy rootfs and kernel image to sw_comp directory
-prep_sw_comp:
-	mkdir -p sw_comp && \
-	cp ../petalinux/build/petalinux/images/linux/rootfs.ext4 ./sw_comp && \
-	cp ../petalinux/build/petalinux/images/linux/Image ./sw_comp
-
-# Target: prep_sysroot
-# Install sysroot to sw_comp directory
-prep_sysroot: ../petalinux/build/petalinux/images/linux/sdk.sh
-	rm -rf ./sysroot && ../petalinux/build/petalinux/images/linux/sdk.sh -d ./sw_comp -y
+.PHONY: all pfm ultraclean clean sd_card ${XCLBIN} package
 
 # Target: pfm
 # Generate the Vitis platform with XSCT
@@ -62,24 +42,17 @@ pfm:
 #------------------------------------------------------------------------------
 
 
-#TARGET   = hw_emu
 TARGET   = hw
 MODE	 = linux
-#PLATFORM = ${PLATFORM_REPO_PATHS}/xilinx_vck190_es1_base_202110_1/xilinx_vck190_es1_base_202110_1.xpfm
-#PLATFORM = /group/xrlabs2/jackl/proj/acdc/vitis_2021.2_bram_platform/platforms/vck190_bare_2021.2/vck190_bare_2021.2.xpfm
-#PLATFORM = /group/xrlabs2/jackl/proj/acdc/vitis_2021.2_bram_platform/platforms/vck190_bare_2021_2/vck190_bare_2021_2.xpfm
-#PLATFORM = ./platform_repo/xilinx_vck190_prod_bare/export/xilinx_vck190_prod_bare/xilinx_vck190_prod_bare.xpfm
 PLATFORM = ./platform_repo/xilinx_vck5000_air/export/xilinx_vck5000_air/xilinx_vck5000_air.xpfm
 
 XCLBIN   = vck5000_aie_base_graph_${TARGET}.xsa
 XSA	 = vck5000_aie_base_graph_${TARGET}.xsa
 XPFM	 = vck5000_xpfm
-HOST_EXE = host.exe
-SDKTARGETSYSROOT ?= ${SYSROOT}
 
 GRAPH    = aie/graph.cpp
 LIBADF  = libadf.a
-AIE_CMPL_CMD = aiecompiler -platform=${PLATFORM} -include="./aie" -workdir=./Work ${GRAPH} 
+AIE_CMPL_CMD = aiecompiler -platform=${PLATFORM} -include="./aie" -workdir=./Work ${GRAPH}
 AIE_SIM_CMD = aiesimulator --pkg-dir=./Work --dump-vcd foo
 EMU_CMD = ./launch_hw_emu.sh
 
@@ -90,7 +63,7 @@ EMU_CMD = ./launch_hw_emu.sh
 
 VCC      = v++
 VPP_SPEC =system.cfg
-VPP_FLAGS=--save-temps --verbose --config ${VPP_SPEC} 
+VPP_FLAGS=--save-temps --verbose --config ${VPP_SPEC}
 VPP_STRATEGY=--vivado.impl.strategies "Performance_ExplorePostRoutePhysOpt,Performance_NetDelay_high,Performance_WLBlockPlacementFanoutOpt"
 LDCLFLAGS=
 
@@ -110,17 +83,8 @@ __check_defined = \
 guard-PLATFORM_REPO_PATHS:
 	$(call check_defined, PLATFORM_REPO_PATHS, Set your where you downloaded xilinx_vck190_es1_base_202110_1)
 
-guard-ROOTFS:
-	$(call check_defined, ROOTFS, Set to: xilinx-versal-common-v2021.1/rootfs.ext4)
-
-guard-IMAGE:
-	$(call check_defined, IMAGE, Set to: xilinx-versal-common-v2021.1/Image)
-
 guard-CXX:
 	$(call check_defined, CXX, Run: xilinx-versal-common-v2021.1/environment-setup-cortexa72-cortexa53-xilinx-linux)
-
-guard-SDKTARGETSYSROOT:
-	$(call check_defined, SDKTARGETSYSROOT, Run: xilinx-versal-common-v2021.1/environment-setup-cortexa72-cortexa53-xilinx-linux)
 
 ###
 
@@ -135,29 +99,17 @@ aiesim: ${LIBADF}
 
 xclbin: guard-PLATFORM_REPO_PATHS ${XCLBIN}
 
-${XCLBIN}: ${LIBADF} ${VPP_SPEC} 
-	${VCC} -g -l --platform ${PLATFORM} ${LIBADF} -t ${TARGET} ${VPP_STRATEGY} ${VPP_FLAGS} -o $@ --vivado.prop run.project_1_ernic_0_0_synth_1.STEPS.SYNTH_DESIGN.ARGS.MAX_BRAM_CASCADE_HEIGHT=1 --vivado.prop run.project_1_ernic_1_0_synth_1.STEPS.SYNTH_DESIGN.ARGS.MAX_BRAM_CASCADE_HEIGHT=1
+${XCLBIN}: ${LIBADF} ${VPP_SPEC}
+	${VCC} -g -l --platform ${PLATFORM} ${LIBADF} -t ${TARGET} ${VPP_STRATEGY} ${VPP_FLAGS} -o $@
 
-host: guard-CXX guard-SDKTARGETSYSROOT ${HOST_EXE}
-${HOST_EXE}: ${GRAPH} ./Work/ps/c_rts/aie_control_xrt.cpp
-	$(MAKE) -C sw/
-
-package_${TARGET}: ${LIBADF} ${XCLBIN}  
+package_${TARGET}: ${LIBADF} ${XCLBIN}
 	bootgen -arch versal -image vck5000_bootgen.bif -w on -o final_vck5000.pdi -log error
-
-#	${VCC} -p -t ${TARGET} -f ${PLATFORM} \
-#		--package.boot_mode=ospi \
-#		--package.defer_aie_run \
-#    --package.ps_elf airrt_cpp.elf,a72-0 \
-#		${XCLBIN} ${LIBADF}
 
 pdi/microblaze_reset.cdo: pdi/microblaze_reset.txt
 	cdoutil -output-binary-be -output-file pdi/microblaze_reset.cdo pdi/microblaze_reset.txt
 
-prep_package: bl31.elf plm.elf psmfw.elf system.dtb u-boot.elf pdi/microblaze_reset.cdo
-
 program_vck5000: final_vck5000.pdi
-	$(VIVADO) -mode batch -source program_vck5000.tcl 
+	$(VIVADO) -mode batch -source program_vck5000.tcl
 
 clean:
 	$(RM) -r vitis_* xrc.log ./sd_dir/boot.scr rootfs ./sd_card/* *.ltx
@@ -165,7 +117,6 @@ clean:
 	$(RM) -rf _x v++_* ${XOS} ${OS} ${LIBADF} *.o.* *.o *.xpe *.xo.* \
 	       vck5000_aie_base*.xclbin* *.xsa *.log *.package_summary *.jou xnwOut Work Map_Report.csv \
 	       ilpProblem* sol.db drivers .Xil *.txt *.link_summary
-	$(MAKE) -C sw clean
 
 ultraclean:
 	$(RM) -r vitis_* xrc.log build platform_repo ./sd_dir/boot.scr output rootfs sw_comp

@@ -9,16 +9,15 @@ XSA_DIR ?= $(CWD)/vivado
 
 .phony: all
 
-$(PLATFORM): all
 all: $(PLATFORM)
 
 $(PLATFORM): xsa platform
 	@echo 'Platform build complete'
 
-xsa: 
+xsa:
 	$(MAKE) -C vivado PLATFORM=$(PLATFORM)
 
-xsa_clean: 
+xsa_clean:
 	$(MAKE) -C vivado clean PLATFORM=$(PLATFORM)
 	$(MAKE) -C vivado ultraclean PLATFORM=$(PLATFORM)
 
@@ -31,4 +30,4 @@ platform_clean:
 
 clean: xsa_clean platform_clean
 	${RM} -r platform_repo
-	
+
