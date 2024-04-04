@@ -137,11 +137,18 @@ static void vck5000_send_admin_queue_cmd_and_wait(struct amdair_device *air_dev,
 			   + pkt_id * AQL_PKT_SIZE
 			   + AQL_PKT_COMPLETION_SIGNAL_OFFSET);
 
+  uint64_t timeout_count = 0;
 	while (completion_signal_val) {
 		completion_signal_val
 			= ioread64(air_dev->queue_mgr.admin_queue.ring_buf
 				   + pkt_id * AQL_PKT_SIZE
 			   	   + AQL_PKT_COMPLETION_SIGNAL_OFFSET);
+
+    if(timeout_count >= KERNEL_CMD_TIMEOUT_VAL) {
+      dev_warn(&air_dev->pdev->dev, "Timed out on kernel command. Firmware most likely needs to be reset.");
+      break;
+    }
+    timeout_count++;
 	}
 
 	if (cmd_type == AQL_AIR_PKT_TYPE_READ_AIE_REG32) {
