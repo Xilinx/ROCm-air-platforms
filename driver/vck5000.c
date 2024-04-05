@@ -107,6 +107,7 @@ static void vck5000_send_admin_queue_cmd_and_wait(struct amdair_device *air_dev,
 	int pkt_id = wr_idx % air_dev->queue_mgr.queue_num_entries;
 	uint64_t completion_signal_val = 1;
 	int i = 0;
+ 	uint64_t timeout_count = 0;
 
 	/* Advance the write index to reserve space in the buffer. */
 	iowrite64(wr_idx + 1, air_dev->queue_mgr.admin_queue.descriptor
@@ -137,7 +138,6 @@ static void vck5000_send_admin_queue_cmd_and_wait(struct amdair_device *air_dev,
 			   + pkt_id * AQL_PKT_SIZE
 			   + AQL_PKT_COMPLETION_SIGNAL_OFFSET);
 
- 	uint64_t timeout_count = 0;
 	while (completion_signal_val) {
 		completion_signal_val
 			= ioread64(air_dev->queue_mgr.admin_queue.ring_buf
