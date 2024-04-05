@@ -10,6 +10,7 @@
 #define QUEUE_INVALID_ID	0xFFFFFFFFU
 
 struct amdair_device;
+struct amdair_process;
 
 /**
  * struct amdair_admin_queue - Command queue managed by the kernel to send
@@ -66,6 +67,6 @@ struct amdair_queue_manager {
 };
 
 int amdair_queue_find_free(struct amdair_device *air_dev);
-int amdair_queue_release(struct amdair_device *air_dev, uint32_t queue_id);
+int amdair_queue_release(struct amdair_process *air_process, uint32_t queue_id);
 
 #endif /* AMDAIR_QUEUE_H_ */

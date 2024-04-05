@@ -103,12 +103,21 @@ err_alloc_process:
 
 int amdair_process_release_resources(struct amdair_process *air_process)
 {
-	int i = 0;
+	int i = 0, q = 0;
+	uint32_t queue_id = 0;
 
 	for (i = 0; i < air_process->num_proc_devs; ++i) {
 		amdair_doorbell_release(air_process->proc_devs[i].dev,
 					air_process->proc_devs[i].db_page_id);
 		idr_destroy(&air_process->proc_devs[i].alloc_idr);
+
+		// Releasing all queues used by the process
+		for (q = 0; q < MAX_HW_QUEUES; q++) {
+			queue_id = air_process->proc_devs[i].queue_id[q];
+			if(queue_id != QUEUE_INVALID_ID) {
+				amdair_queue_release(air_process, queue_id);
+			}				
+		}
 	}
 
 	return 0;
@@ -117,7 +126,7 @@ int amdair_process_release_resources(struct amdair_process *air_process)
 int amdair_process_create_process_device(struct amdair_process *air_process)
 {
 	struct amdair_device *air_dev = NULL;
-	int i = 0;
+	int i = 0, q = 0;
 	int ret = 0;
 
 	if (!air_process)
@@ -138,6 +147,11 @@ int amdair_process_create_process_device(struct amdair_process *air_process)
 		air_process->num_proc_devs++;
 
 		idr_init(&air_process->proc_devs[i].alloc_idr);
+		
+		for (q = 0; q < MAX_HW_QUEUES; q++) {
+			air_process->proc_devs[i].queue_id[q] = QUEUE_INVALID_ID;
+		}
+
 	}
 
 	return 0;

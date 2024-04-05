@@ -44,6 +44,8 @@ struct amdair_process_device {
 
 	uint32_t db_page_id;
 	int num_dbs;
+	
+	uint32_t queue_id[MAX_HW_QUEUES];
 	DECLARE_BITMAP(doorbell_id_map, DOORBELLS_PER_PROCESS);
 
 	struct rb_root_cached dram_heap;
@@ -90,6 +92,8 @@ int amdair_process_get_process_device(struct amdair_process *air_process,
 
 int amdair_process_assign_doorbell(struct amdair_process *air_process,
 				   uint32_t dev_id, uint32_t *db_id);
+int amdair_process_assign_queue(struct amdair_process *air_process,
+				   uint32_t dev_id, uint32_t *queue_id);
 int amdair_process_doorbell_release(struct amdair_process *air_process,
 				    uint32_t dev_id, uint32_t db_id);
 #endif /* AMDAIR_PROCESS_H_ */

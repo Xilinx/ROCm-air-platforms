@@ -459,9 +459,11 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 				     struct amdair_process *air_process)
 {
 	struct amdair_create_queue_args *args = data;
+	struct amdair_process_device *air_pd = NULL;
 	struct amdair_device *air_dev = NULL;
 	uint32_t queue_id = 0;
 	uint32_t db_id = 0;
+	int q = 0;
 	int ret = 0;
 
 	if (!air_process)
@@ -488,9 +490,21 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 		if (!air_dev || air_dev->device_id != args->device_id)
 			return -ENODEV;
 
-		queue_id = amdair_queue_find_free(air_dev);
+		queue_id = amdair_queue_find_free(air_dev);	
 		if (queue_id == QUEUE_INVALID_ID)
 			return -ENOSPC;
+		
+		amdair_process_get_process_device(air_process, args->device_id,
+						&air_pd);
+
+		// Finding first available slot in datastructure to track
+		// queue IDs used by this process device
+		for(q = 0; q < MAX_HW_QUEUES; q++) {
+			if(air_pd->queue_id[q] == QUEUE_INVALID_ID) {
+				air_pd->queue_id[q] = queue_id;
+				break;
+			}
+		}
 
 		ret = amdair_process_assign_doorbell(air_process,
 						     args->device_id, &db_id);
@@ -552,7 +566,7 @@ static int amdair_ioctl_destroy_queue(struct file *filp, void *data,
 		return -ENODEV;
 
 	dev_info(&air_dev->pdev->dev, "Destroying queue ID %u", args->queue_id);
-	ret = amdair_queue_release(air_dev, args->queue_id);
+	ret = amdair_queue_release(air_process, args->queue_id);
 	ret = amdair_process_doorbell_release(air_process, args->device_id,
 					      args->doorbell_id);
 
