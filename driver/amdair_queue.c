@@ -25,7 +25,7 @@ int amdair_queue_release(struct amdair_process *air_process, uint32_t queue_id)
 	// at it can get a pointer to the device as well
 	for (i = 0; i < air_process->num_proc_devs; i++) {
 		for (q = 0; q < MAX_HW_QUEUES; q++) {
-			if(queue_id == air_process->proc_devs[i].queue_id[q]) {
+			if (queue_id == air_process->proc_devs[i].queue_id[q]) {
 				air_process->proc_devs[i].queue_id[q] = QUEUE_INVALID_ID;
 				air_dev = air_process->proc_devs[i].dev;
 				break;
@@ -33,14 +33,13 @@ int amdair_queue_release(struct amdair_process *air_process, uint32_t queue_id)
 		}
 	}
 
-	if(air_dev == NULL) {
+	if (!air_dev) {
 		return -EINVAL;
 	}
 
 	if (queue_id >= air_dev->queue_mgr.num_hw_queues) {
 		return -EINVAL;
 	}
-
 
 	clear_bit(queue_id, air_dev->queue_mgr.hw_queue_map);
 

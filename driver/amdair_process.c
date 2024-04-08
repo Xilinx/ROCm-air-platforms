@@ -101,23 +101,34 @@ err_alloc_process:
 	return ret;
 }
 
+void amdair_process_device_release_queues(struct amdair_process_device *air_pd) {
+
+	int q = 0;
+	struct amdair_process *air_process = NULL;
+	uint32_t queue_id = 0;
+
+	// Get the process from the process_device
+	air_process = air_pd->process;
+
+	// Releasing all queues used by the process
+	for (q = 0; q < MAX_HW_QUEUES; q++) {
+		queue_id = air_pd->queue_id[q];
+		if (queue_id != QUEUE_INVALID_ID) {
+			amdair_queue_release(air_process, queue_id);
+		}				
+	}
+}
+
 int amdair_process_release_resources(struct amdair_process *air_process)
 {
-	int i = 0, q = 0;
-	uint32_t queue_id = 0;
+	int i = 0;
 
 	for (i = 0; i < air_process->num_proc_devs; ++i) {
 		amdair_doorbell_release(air_process->proc_devs[i].dev,
 					air_process->proc_devs[i].db_page_id);
 		idr_destroy(&air_process->proc_devs[i].alloc_idr);
 
-		// Releasing all queues used by the process
-		for (q = 0; q < MAX_HW_QUEUES; q++) {
-			queue_id = air_process->proc_devs[i].queue_id[q];
-			if(queue_id != QUEUE_INVALID_ID) {
-				amdair_queue_release(air_process, queue_id);
-			}				
-		}
+		amdair_process_device_release_queues(&air_process->proc_devs[i]);
 	}
 
 	return 0;
@@ -126,7 +137,8 @@ int amdair_process_release_resources(struct amdair_process *air_process)
 int amdair_process_create_process_device(struct amdair_process *air_process)
 {
 	struct amdair_device *air_dev = NULL;
-	int i = 0, q = 0;
+	int i = 0;
+ 	int q = 0;
 	int ret = 0;
 
 	if (!air_process)
@@ -168,6 +180,53 @@ int amdair_process_get_process_device(struct amdair_process *air_process,
 		return -ENODEV;
 	*air_pd = &air_process->proc_devs[dev_id];
 	return 0;
+}
+
+int amdair_process_assign_queue(struct amdair_process *air_process, 
+				uint32_t dev_id, uint32_t *queue_id)
+{
+	int ret = 0;
+	int q = 0;
+    	bool found_free_slot = false;
+	struct amdair_device *air_dev = NULL;
+	struct amdair_process_device *air_pd = NULL;
+  
+    	// Getting the process_device struct
+	ret = amdair_process_get_process_device(air_process, dev_id,
+						&air_pd);
+
+	if (ret)
+		goto err_no_dev;
+
+	// Getting a free queue on the device
+	air_dev = air_pd->dev;
+	*queue_id = amdair_queue_find_free(air_dev);
+	if (*queue_id == QUEUE_INVALID_ID) {
+		ret = -ENOSPC;
+		goto err_no_dev;
+    	}
+  
+	// Finding first available slot in datastructure to track
+	// queue IDs used by this process device
+	for (q = 0; q < MAX_HW_QUEUES; q++) {
+		if (air_pd->queue_id[q] == QUEUE_INVALID_ID) {
+			air_pd->queue_id[q] = *queue_id;
+        		found_free_slot = true;
+			break;
+		}
+	}
+
+	if (!found_free_slot) {
+		ret = -ENOSPC;
+		goto err_invalid_queue_id;
+	}
+    
+	return 0;
+
+err_invalid_queue_id:
+	amdair_queue_release(air_process, *queue_id);
+err_no_dev:
+	return ret;
 }
 
 int amdair_process_assign_doorbell(struct amdair_process *air_process,

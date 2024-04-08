@@ -29,6 +29,9 @@ struct amdair_buf_object;
  *              Specifies which doorbell page is allocated to the process.
  *
  * @num_dbs: Number of doorbells the process has allocated on the device.
+ * 
+ * @queue_id : Array containing all of the queue IDs on a particular device 
+ *             opened by a process 
  *
  * @doorbell_id_map: Free list of doorbells. 0 means free 1 means in use or
  *                   unavailable.
@@ -44,7 +47,7 @@ struct amdair_process_device {
 
 	uint32_t db_page_id;
 	int num_dbs;
-	
+
 	uint32_t queue_id[MAX_HW_QUEUES];
 	DECLARE_BITMAP(doorbell_id_map, DOORBELLS_PER_PROCESS);
 
@@ -90,6 +93,9 @@ int amdair_process_get_process_device(struct amdair_process *air_process,
 				      uint32_t dev_id,
 				      struct amdair_process_device **air_pd);
 
+
+int amdair_process_assign_queue(struct amdair_process *air_process, 
+           uint32_t dev_id, uint32_t *queue_id);
 int amdair_process_assign_doorbell(struct amdair_process *air_process,
 				   uint32_t dev_id, uint32_t *db_id);
 int amdair_process_assign_queue(struct amdair_process *air_process,
