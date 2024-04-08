@@ -488,9 +488,8 @@ static int amdair_ioctl_create_queue(struct file *filp, void *data,
 		if (!air_dev || air_dev->device_id != args->device_id)
 			return -ENODEV;
 
-		queue_id = amdair_queue_find_free(air_dev);
-		if (queue_id == QUEUE_INVALID_ID)
-			return -ENOSPC;
+		ret = amdair_process_assign_queue(air_process,
+						     args->device_id, &queue_id);
 
 		ret = amdair_process_assign_doorbell(air_process,
 						     args->device_id, &db_id);
@@ -552,7 +551,7 @@ static int amdair_ioctl_destroy_queue(struct file *filp, void *data,
 		return -ENODEV;
 
 	dev_info(&air_dev->pdev->dev, "Destroying queue ID %u", args->queue_id);
-	ret = amdair_queue_release(air_dev, args->queue_id);
+	ret = amdair_queue_release(air_process, args->queue_id);
 	ret = amdair_process_doorbell_release(air_process, args->device_id,
 					      args->doorbell_id);
 
