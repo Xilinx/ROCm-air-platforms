@@ -56,6 +56,13 @@ AIE_CMPL_CMD = aiecompiler -platform=${PLATFORM} -include="./aie" -workdir=./Wor
 AIE_SIM_CMD = aiesimulator --pkg-dir=./Work --dump-vcd foo
 EMU_CMD = ./launch_hw_emu.sh
 
+# Putting where we put the PL source code
+PL_SRC_REPO  := ./pl
+COUNTER_KERNEL_TOP := counter_hls
+COUNTER_KERNEL_SRC := $(PL_SRC_REPO)/counter/$(COUNTER_KERNEL_TOP).cpp
+COUNTER_KERNEL_XO  := $(COUNTER_KERNEL_TOP).$(TARGET)
+COUNTER_KERNEL_VPP_FLAGS := --hls.clock $(VPP_CLOCK_FREQ):$(COUNTER_KERNEL_TOP)
+
 ##########################################################################################################################################################
 ### DO NOT MODIFY BELOW THIS LINE UNLESS NECESSARY
 ################################################################################################################################################
@@ -99,8 +106,18 @@ aiesim: ${LIBADF}
 
 xclbin: guard-PLATFORM_REPO_PATHS ${XCLBIN}
 
-${XCLBIN}: ${LIBADF} ${VPP_SPEC}
-	${VCC} -g -l --platform ${PLATFORM} ${LIBADF} -t ${TARGET} ${VPP_STRATEGY} ${VPP_FLAGS} -o $@
+${COUNTER_KERNEL_XO}.xo:
+	v++ --target $(TARGET) $(COUNTER_KERNEL_VPP_FLAGS) \
+		$(VPP_FLAGS) -c -k $(COUNTER_KERNEL_TOP) \
+		--platform ${PLATFORM} \
+		$(COUNTER_KERNEL_SRC) -o $@
+
+
+${XCLBIN}: $(COUNTER_KERNEL_XO).xo ${LIBADF} ${VPP_SPEC} 
+	${VCC} -g -l --platform ${PLATFORM} ${COUNTER_KERNEL_XO}.xo ${LIBADF} -t ${TARGET} ${VPP_STRATEGY} ${VPP_FLAGS} -o $@ --to_step vpl.update_bd
+	vivado -mode batch -source fixup_pl_design.tcl
+	${VCC} -g -l --platform ${PLATFORM} ${COUNTER_KERNEL_XO}.xo ${LIBADF} -t ${TARGET} ${VPP_STRATEGY} ${VPP_FLAGS} -o $@ --from_step vpl.generate_target
+  
 
 package_${TARGET}: ${LIBADF} ${XCLBIN}
 	bootgen -arch versal -image vck5000_bootgen.bif -w on -o final_vck5000.pdi -log error
