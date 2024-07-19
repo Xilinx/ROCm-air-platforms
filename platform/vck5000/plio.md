@@ -1,6 +1,6 @@
 # PLIO
 
-The platform contained in this repository supports two mechanisms of interfacing with the AIEs. General Memory IO (GMIO) programs the hardened shim DMAs in the tiles within Row 0 of the array to move data between the AIE array and the device DRAM. Programmable Logic IO (PLIO) exposes interfaces to the PL which connect to the AIE array AXI Stream network. There are PLIOs in every column of the devices and GMIOs in certain columns of the device (More details can be found in the [firmware](../../firmware/)). This guide will walk through how to build off this platform to connect IPs within the programmable logic to an AIE design programmed using [mlir-aie](https://github.com/Xilinx/mlir-aie). 
+The platform contained in this repository supports two mechanisms of interfacing with the AIEs. General Memory IO (GMIO) programs the hardened shim DMAs in the tiles within Row 0 of the array to move data between the AIE array and the device DRAM. Programmable Logic IO (PLIO) exposes interfaces to the PL which connect to the AIE array AXI Stream network. There are PLIOs in every column of the devices and GMIOs in certain columns of the device (More details can be found in the [VCK5000 platform documentation](./README.md)). This guide will walk through how to build off this platform to connect IPs within the programmable logic to an AIE design programmed using [mlir-aie](https://github.com/Xilinx/mlir-aie). 
 
 ## Platform Building and Programming Flow
 
