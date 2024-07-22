@@ -67,7 +67,7 @@ GMIO gmioIn27("gmioIn27", 64, 1);
 GMIO gmioIn28("gmioIn28", 64, 1);
 GMIO gmioIn29("gmioIn29", 64, 1);
 GMIO gmioIn30("gmioIn30", 64, 1);
-//GMIO gmioIn31("gmioIn31", 64, 1);
+GMIO gmioIn31("gmioIn31", 64, 1);
 
 PLIO plioOut0("plioOut0", adf::plio_64_bits);
 GMIO gmioOut0("gmioOut0", 64, 1);
@@ -101,9 +101,9 @@ GMIO gmioOut27("gmioOut27", 64, 1);
 GMIO gmioOut28("gmioOut28", 64, 1);
 GMIO gmioOut29("gmioOut29", 64, 1);
 GMIO gmioOut30("gmioOut30", 64, 1);
-//GMIO gmioOut31("gmioOut31", 64, 1);
+GMIO gmioOut31("gmioOut31", 64, 1);
 
-simulation::platform</*NUM_MM + NUM_STREAM*/32,/*NUM_MM + NUM_STREAM*/32> plat(
+simulation::platform<NUM_MM + NUM_STREAM,NUM_MM + NUM_STREAM> plat(
 &gmioIn0,
 &gmioIn1,
 &gmioIn2,
@@ -135,8 +135,8 @@ simulation::platform</*NUM_MM + NUM_STREAM*/32,/*NUM_MM + NUM_STREAM*/32> plat(
 &gmioIn28,
 &gmioIn29,
 &gmioIn30,
+&gmioIn31,
 &plioIn0,
-//&gmioIn31,
 
 &gmioOut0,
 &gmioOut1,
@@ -169,8 +169,8 @@ simulation::platform</*NUM_MM + NUM_STREAM*/32,/*NUM_MM + NUM_STREAM*/32> plat(
 &gmioOut28,
 &gmioOut29,
 &gmioOut30,
+&gmioOut31,
 &plioOut0
-//&gmioOut31
 );
 
 //for indexed access
@@ -178,13 +178,13 @@ GMIO* gmioIn[NUM_MM] = {
     &gmioIn0,&gmioIn1,&gmioIn2,&gmioIn3,&gmioIn4,&gmioIn5,&gmioIn6,&gmioIn7,&gmioIn8,&gmioIn9,
     &gmioIn10,&gmioIn11,&gmioIn12,&gmioIn13,&gmioIn14,&gmioIn15,&gmioIn16,&gmioIn17,&gmioIn18,&gmioIn19,
     &gmioIn20,&gmioIn21,&gmioIn22,&gmioIn23,&gmioIn24,&gmioIn25,&gmioIn26,&gmioIn27,&gmioIn28,&gmioIn29,
-    &gmioIn30/*,&gmioIn31*/};
+    &gmioIn30,&gmioIn31};
     
 GMIO* gmioOut[NUM_MM] = {
     &gmioOut0,&gmioOut1,&gmioOut2,&gmioOut3,&gmioOut4,&gmioOut5,&gmioOut6,&gmioOut7,&gmioOut8,&gmioOut9,
     &gmioOut10,&gmioOut11,&gmioOut12,&gmioOut13,&gmioOut14,&gmioOut15,&gmioOut16,&gmioOut17,&gmioOut18,&gmioOut19,
     &gmioOut20,&gmioOut21,&gmioOut22,&gmioOut23,&gmioOut24,&gmioOut25,&gmioOut26,&gmioOut27,&gmioOut28,&gmioOut29,
-    &gmioOut30/*,&gmioOut31*/};
+    &gmioOut30,&gmioOut31};
 
 //graph declaration
 mygraph g;

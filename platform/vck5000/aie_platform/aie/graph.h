@@ -28,7 +28,7 @@
 
 using namespace adf;
 
-#define NUM_MM 31
+#define NUM_MM 32
 #define NUM_STREAM 1
 
 class mygraph : public graph
@@ -63,6 +63,7 @@ public:
             connect<window<128>>(input_stream[i], k[i].in[0]);
             connect<window<128>>(k[i].out[0], output_stream[i]);
             async(k[i].in[1]);
+
         }
         
         /*location<kernel>(k[0]) = tile(2,0);
