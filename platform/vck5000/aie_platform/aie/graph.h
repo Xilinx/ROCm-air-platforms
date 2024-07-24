@@ -28,26 +28,42 @@
 
 using namespace adf;
 
-#define NUM 32
+#define NUM_MM 32
+#define NUM_STREAM 1
 
 class mygraph : public graph
 {
 public:
-    kernel k[NUM];
-    input_port input[NUM];
-    input_port output[NUM];
+    kernel k[NUM_MM + NUM_STREAM];
+    input_port input_mm[NUM_MM];
+    input_port output_mm[NUM_MM];
+
+    input_port input_stream[NUM_STREAM];
+    output_port output_stream[NUM_STREAM];
     
     mygraph()
     {
-        for (int i=0; i<NUM; i++)
+        for (int i=0; i<NUM_MM; i++)
         {
             k[i] = kernel::create(add);
             source(k[i]) = "aie/add.cpp";
             runtime<ratio>(k[i]) = 0.9;
             
-            connect<window<128>>(input[i], k[i].in[0]);
-            connect<window<128>>(k[i].out[0], output[i]);
+            connect<window<128>>(input_mm[i], k[i].in[0]);
+            connect<window<128>>(k[i].out[0], output_mm[i]);
             async(k[i].in[1]);
+        }
+
+        for (int i=0; i<NUM_STREAM; i++)
+        {
+            k[i] = kernel::create(add);
+            source(k[i]) = "aie/add.cpp";
+            runtime<ratio>(k[i]) = 0.9;
+            
+            connect<window<128>>(input_stream[i], k[i].in[0]);
+            connect<window<128>>(k[i].out[0], output_stream[i]);
+            async(k[i].in[1]);
+
         }
         
         /*location<kernel>(k[0]) = tile(2,0);

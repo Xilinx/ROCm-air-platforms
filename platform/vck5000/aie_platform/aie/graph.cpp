@@ -34,6 +34,8 @@
 
 using namespace adf;
 
+
+PLIO plioIn0("plioIn0", adf::plio_64_bits);
 GMIO gmioIn0("gmioIn0", 64, 1);
 GMIO gmioIn1("gmioIn1", 64, 1);
 GMIO gmioIn2("gmioIn2", 64, 1);
@@ -67,6 +69,7 @@ GMIO gmioIn29("gmioIn29", 64, 1);
 GMIO gmioIn30("gmioIn30", 64, 1);
 GMIO gmioIn31("gmioIn31", 64, 1);
 
+PLIO plioOut0("plioOut0", adf::plio_64_bits);
 GMIO gmioOut0("gmioOut0", 64, 1);
 GMIO gmioOut1("gmioOut1", 64, 1);
 GMIO gmioOut2("gmioOut2", 64, 1);
@@ -100,7 +103,7 @@ GMIO gmioOut29("gmioOut29", 64, 1);
 GMIO gmioOut30("gmioOut30", 64, 1);
 GMIO gmioOut31("gmioOut31", 64, 1);
 
-simulation::platform<NUM,NUM> plat(
+simulation::platform<NUM_MM + NUM_STREAM,NUM_MM + NUM_STREAM> plat(
 &gmioIn0,
 &gmioIn1,
 &gmioIn2,
@@ -133,6 +136,7 @@ simulation::platform<NUM,NUM> plat(
 &gmioIn29,
 &gmioIn30,
 &gmioIn31,
+&plioIn0,
 
 &gmioOut0,
 &gmioOut1,
@@ -165,17 +169,18 @@ simulation::platform<NUM,NUM> plat(
 &gmioOut28,
 &gmioOut29,
 &gmioOut30,
-&gmioOut31
+&gmioOut31,
+&plioOut0
 );
 
 //for indexed access
-GMIO* gmioIn[NUM] = {
+GMIO* gmioIn[NUM_MM] = {
     &gmioIn0,&gmioIn1,&gmioIn2,&gmioIn3,&gmioIn4,&gmioIn5,&gmioIn6,&gmioIn7,&gmioIn8,&gmioIn9,
     &gmioIn10,&gmioIn11,&gmioIn12,&gmioIn13,&gmioIn14,&gmioIn15,&gmioIn16,&gmioIn17,&gmioIn18,&gmioIn19,
     &gmioIn20,&gmioIn21,&gmioIn22,&gmioIn23,&gmioIn24,&gmioIn25,&gmioIn26,&gmioIn27,&gmioIn28,&gmioIn29,
     &gmioIn30,&gmioIn31};
     
-GMIO* gmioOut[NUM] = {
+GMIO* gmioOut[NUM_MM] = {
     &gmioOut0,&gmioOut1,&gmioOut2,&gmioOut3,&gmioOut4,&gmioOut5,&gmioOut6,&gmioOut7,&gmioOut8,&gmioOut9,
     &gmioOut10,&gmioOut11,&gmioOut12,&gmioOut13,&gmioOut14,&gmioOut15,&gmioOut16,&gmioOut17,&gmioOut18,&gmioOut19,
     &gmioOut20,&gmioOut21,&gmioOut22,&gmioOut23,&gmioOut24,&gmioOut25,&gmioOut26,&gmioOut27,&gmioOut28,&gmioOut29,
@@ -190,10 +195,16 @@ class GlobalConnection
 public:
     GlobalConnection()
     {
-        for (int i=0; i<NUM; i++)
+        for (int i=0; i<NUM_MM; i++)
         {
-            connect<>(plat.src[i], g.input[i]);
-            connect<>(g.output[i], plat.sink[i]);
+            connect<>(plat.src[i], g.input_mm[i]);
+            connect<>(g.output_mm[i], plat.sink[i]);
+        }
+
+        for (int i=NUM_MM; i<NUM_STREAM + NUM_MM; i++)
+        {
+            connect<>(plat.src[i], g.input_stream[i - NUM_MM]);
+            connect<>(g.output_stream[i - NUM_MM], plat.sink[i]);
         }
     }
 } connection;
@@ -228,7 +239,7 @@ int main(int argc, char **argv)
         g.update(g.k[i].in[1], i+1);
     }
 
-    int32* inputArray[NUM];
+    int32* inputArray[NUM_MM];
     for (int i=M; i<M+P; i++)
     {
         inputArray[i] = (int32*)GMIO::malloc(256*sizeof(int32));
@@ -236,7 +247,7 @@ int main(int argc, char **argv)
             inputArray[i][j] = i+1;
     }
     
-    int32* outputArray[NUM];
+    int32* outputArray[NUM_MM];
     for (int i=M; i<M+P; i++)
     {
         outputArray[i] = (int32*)GMIO::malloc(256*sizeof(int32));

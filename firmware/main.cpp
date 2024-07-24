@@ -17,6 +17,7 @@
 #include "hsa_csr.h"
 #include "hsa_ext_air.h"
 #include "memory.h"
+#include "soft-dma.h"
 
 extern "C" {
 
@@ -173,6 +174,8 @@ uint8_t col_dma_cols[NUM_COL_DMAS] = {7, 8, 9, 10};
 
 #define REG_AIE_CORE_CTL_RESET (1U << 1)
 #define REG_AIE_CORE_CTL_ENABLE (1U << 0)
+
+#define SOFT_DMA_CTRL_BASE_ADDR 0x20180000000
 
 inline uint64_t mymod(uint64_t a) {
   uint64_t result = a;
@@ -1731,6 +1734,41 @@ int do_packet_memcpy(uint32_t slot) {
   }
 }
 
+void program_soft_pl(uint64_t paddr, uint32_t length, uint32_t direction) {
+
+
+    uint32_t offset = direction == SHIM_DMA_S2MM ? XAXIDMA_RX_OFFSET : 0;
+    volatile uint32_t *soft_dma_base_addr = (uint32_t *) (SOFT_DMA_CTRL_BASE_ADDR + offset);
+    volatile uint32_t soft_dma_control_vals = soft_dma_base_addr[(XAXIDMA_CR_OFFSET) / 4];
+
+    // We are just using a single descriptor so need to reset the channel after using
+    // This is maybe a bit overkill but we are not using it for anything fancy so it should suffice
+    soft_dma_base_addr[(XAXIDMA_CR_OFFSET) / 4] = soft_dma_control_vals | XAXIDMA_CR_RESET_MASK;
+    soft_dma_base_addr[(XAXIDMA_CR_OFFSET) / 4] = soft_dma_control_vals;
+
+    // Checking to make sure it is not busy
+    if(soft_dma_base_addr[(XAXIDMA_SR_OFFSET) / 4] | XAXIDMA_HALTED_MASK) {
+
+      if(soft_dma_base_addr[(XAXIDMA_SR_OFFSET) / 4] & XAXIDMA_IDLE_MASK) {
+        air_printf("[ERROR] Soft dma is busy\r\n");
+        return;
+      }
+    }
+
+    // Setting the address
+    soft_dma_base_addr[(XAXIDMA_SRCADDR_OFFSET) / 4] = (uint32_t)(paddr & 0xFFFFFFFF);
+    soft_dma_base_addr[(XAXIDMA_SRCADDR_MSB_OFFSET) / 4] = (uint32_t)((paddr >> 32) & 0xFFFFFFFF);
+
+    // Setting the run
+    soft_dma_base_addr[(XAXIDMA_CR_OFFSET) / 4] = soft_dma_control_vals | XAXIDMA_CR_RUNSTOP_MASK;
+
+    // Writing to the BTT register which starts the transfer
+    soft_dma_base_addr[(XAXIDMA_BUFFLEN_OFFSET) / 4] = length;
+
+    return;
+
+}
+
 int stage_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint32_t slot,
                            uint32_t memory_space) {
   air_printf("stage_packet_nd_memcpy %d\n\r", slot);
@@ -1747,7 +1785,14 @@ int stage_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint32_t slot,
     nd_dma_put_checkpoint(&pkt, slot, 0, 0, 0, paddr, paddr, paddr);
     staged_nd_slot[slot].valid = 1;
     return 0;
-  } else {
+  }
+  else if(memory_space == 1) {
+    uint32_t length_1d = (pkt->arg[2] >> 0) & 0xffffffff;
+    uint16_t direction = (pkt->arg[0] >> 60) & 0x000f;
+    program_soft_pl(paddr, length_1d, direction);
+    return 1;
+  } 
+  else {
     air_printf("NOT SUPPORTED: Cannot program memory space %d DMAs\n\r",
                memory_space);
     return 1;
