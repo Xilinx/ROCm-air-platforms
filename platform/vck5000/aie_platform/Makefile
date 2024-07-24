@@ -57,11 +57,11 @@ AIE_SIM_CMD = aiesimulator --pkg-dir=./Work --dump-vcd foo
 EMU_CMD = ./launch_hw_emu.sh
 
 # Putting where we put the PL source code
-PL_SRC_REPO  := ./pl
-COUNTER_KERNEL_TOP := counter_hls
-COUNTER_KERNEL_SRC := $(PL_SRC_REPO)/counter/$(COUNTER_KERNEL_TOP).cpp
-COUNTER_KERNEL_XO  := $(COUNTER_KERNEL_TOP).$(TARGET)
-COUNTER_KERNEL_VPP_FLAGS := --hls.clock $(VPP_CLOCK_FREQ):$(COUNTER_KERNEL_TOP)
+PL_SRC_REPO  = ./pl
+COUNTER_KERNEL_TOP = counter_hls
+COUNTER_KERNEL_SRC = $(PL_SRC_REPO)/counter/$(COUNTER_KERNEL_TOP).cpp
+COUNTER_KERNEL_XO  = $(COUNTER_KERNEL_TOP).$(TARGET)
+COUNTER_KERNEL_VPP_FLAGS = --hls.clock $(VPP_CLOCK_FREQ):$(COUNTER_KERNEL_TOP)
 
 ##########################################################################################################################################################
 ### DO NOT MODIFY BELOW THIS LINE UNLESS NECESSARY

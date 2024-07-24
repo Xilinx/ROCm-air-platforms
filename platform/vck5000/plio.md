@@ -33,6 +33,7 @@ To demonstrate how the vivado project can be modified, we provide [fixup\_pl\_de
 
 # Modifying the platform with your own PL IP
 
-Users can treat the vivado project at `./platform/vck5000/aie_platform/_x/link/vivado/vpl/prj/` as a standard Vivado project. Users can replace the AXI DMA with their own PL IPs and interface with the AIE PLIO using the standard mechanism to connect IPs using the IP Integrator or RTL IP instaniations. Users can also use the Vivado provided Integrated Logic Analyzer (ILA) functionality to get visibility into the design.
+Users can treat the vivado project at `./platform/vck5000/aie_platform/_x/link/vivado/vpl/prj/` as a standard Vivado project. Users can replace the AXI DMA with their own PL IPs and interface with the AIE PLIO using the standard mechanism to connect IPs using the IP Integrator or RTL IP instaniations. Users can also use the Vivado provided Integrated Logic Analyzer (ILA) functionality to get visibility into the design. After modifying the design, users can leverage Vivado to export a block design TCL script to allow version control and portability of changes made to the block design.
 
 When done customizing the design, a `.pdi` can be generated using the standard Vivado flow for running an implementation and generating a device binary. Note that when a PDI is created this way, the ARM firmware is not automatically added to the PDI. See the [firmware](../../firmware/) documentation on how to dynamically load the firmware via `xsdb` or the [platform makefile](./aie_platform/Makefile) on how to use bootgen to embed the firmware ELF into the `.pdi`.
+
