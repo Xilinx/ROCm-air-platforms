@@ -1,6 +1,6 @@
 //===- debug.h ---------------------------------------------------*- C++ -*-===//
 //
-// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// Copyright (C) 2023-2025, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 //
 //===----------------------------------------------------------------------===//
@@ -10,7 +10,9 @@
 
 #include "xil_printf.h"
 
+#ifndef CHATTY
 #define CHATTY 0
+#endif
 
 #define air_printf(fmt, ...) \
   do { \

@@ -1,0 +1,77 @@
+From 36de0240ba4c015bf807af48e512cedc3a7df208 Mon Sep 17 00:00:00 2001
+From: Mark Wyse <mark.wyse@amd.com>
+Date: Wed, 22 Jan 2025 10:13:18 -0800
+Subject: [PATCH] air config
+
+---
+ .../src/include/bp_common_aviary_pkgdef.svh   | 38 ++++++++++++++++++-
+ 1 file changed, 36 insertions(+), 2 deletions(-)
+
+diff --git a/bp_common/src/include/bp_common_aviary_pkgdef.svh b/bp_common/src/include/bp_common_aviary_pkgdef.svh
+index 1b4e6e2a..d70abcf4 100644
+--- a/bp_common/src/include/bp_common_aviary_pkgdef.svh
++++ b/bp_common/src/include/bp_common_aviary_pkgdef.svh
+@@ -7,6 +7,34 @@
+   // Default configuration is unicore
+   localparam bp_proc_param_s bp_unicore_cfg_p = bp_default_cfg_p;
+ 
++  localparam bp_proc_param_s bp_unicore_air_override_p =
++    '{vaddr_width  : 44
++      ,paddr_width : 44
++
++      ,icache_sets          : 64
++      ,icache_assoc         : 4
++      ,icache_block_width   : 512
++      ,icache_fill_width    : 128
++
++      ,dcache_sets          : 64
++      ,dcache_assoc         : 4
++      ,dcache_block_width   : 512
++      ,dcache_fill_width    : 128
++
++      ,l2_sets             : 8
++      ,l2_assoc            : 8
++
++      ,mem_noc_did_width   : 4
++
++      ,compressed_support  : 1
++
++      ,default : "inv"
++      };
++  `bp_aviary_derive_cfg(bp_unicore_air_cfg_p
++                        ,bp_unicore_air_override_p
++                        ,bp_unicore_cfg_p
++                        );
++
+   localparam bp_proc_param_s bp_unicore_megaparrot_override_p =
+     '{paddr_width : 56
+       ,daddr_width: 55
+@@ -502,8 +530,11 @@
+   /* verilator lint_off WIDTH */
+   parameter bp_proc_param_s [max_cfgs-1:0] all_cfgs_gp =
+   {
++    // AIR configurations
++    bp_unicore_air_cfg_p
++
+     // L2 extension configurations
+-    bp_multicore_4_l2e_cfg_p
++    ,bp_multicore_4_l2e_cfg_p
+     ,bp_multicore_2_l2e_cfg_p
+     ,bp_multicore_1_l2e_cfg_p
+ 
+@@ -553,8 +584,11 @@
+   // This enum MUST be kept up to date with the parameter array above
+   typedef enum bit [lg_max_cfgs-1:0]
+   {
++    // AIR configurations
++    e_bp_unicore_air_cfg                            = 33
++
+     // L2 extension configurations
+-    e_bp_multicore_4_l2e_cfg                        = 32
++    ,e_bp_multicore_4_l2e_cfg                       = 32
+     ,e_bp_multicore_2_l2e_cfg                       = 31
+     ,e_bp_multicore_1_l2e_cfg                       = 30
+ 
+-- 
+2.34.1
+

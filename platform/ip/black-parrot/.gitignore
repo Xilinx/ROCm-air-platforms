@@ -1,0 +1,9 @@
+blackparrot_ip*
+ip.flist
+ip_base.flist
+lint.flist
+bp-sdk/
+*.log
+*.diff
+bp_fpga.svh
+vivado*

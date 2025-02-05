@@ -1,83 +1,82 @@
 //===- main.cpp -------------------------------------------------*- C++ -*-===//
 //
 // Copyright (C) 2020-2022, Xilinx Inc.
-// Copyright (C) 2022, Advanced Micro Devices, Inc.
+// Copyright (C) 2022-2025, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 //
 //===----------------------------------------------------------------------===//
 
+// Includes
 
 #include "unistd.h"
 #include <cstdint>
 #include <cstring>
 #include <limits>
 
+// Includes
+
+#include "airbin.h"
 #include "amd_hsa.h"
+#include "arm_bp_intf.h"
+#include "arm_monitor_intf.h"
+#include "cdma.h"
 #include "debug.h"
 #include "hsa_csr.h"
 #include "hsa_ext_air.h"
 #include "memory.h"
-#include "soft-dma.h"
-
-extern "C" {
-
-// Right now, only ARM can control ERNICs
-#ifdef ARM_CONTROLLER
-#include "pcie-ernic-defines.h"
-#endif
-
-#if defined(ARM_CONTROLLER)
-#include "xaiengine.h"
-#include "xil_cache.h"
-#else
-#include "pvr.h"
-#endif
-
-}
-
-#include "airbin.h"
-#include "cdma.h"
 #include "platform.h"
-
 #include "shell.h"
 
+extern "C" {
+#include "pcie-ernic-defines.h"
+#include "xaiengine.h"
+#include "xil_cache.h"
+#include "xmutex.h"
+}
+
+// Defines and Globals
 #define XAIE_NUM_ROWS 8
 #define XAIE_NUM_COLS 50
-
-#ifdef ARM_CONTROLLER
-#define XAIE_ADDR_ARRAY_OFF 0
-#else
-#define XAIE_ADDR_ARRAY_OFF 0x800ULL
-#endif // ARM_CONTROLLER
-
-#define NUM_SHIM_DMA_S2MM_CHANNELS 2
-#define NUM_SHIM_DMA_MM2S_CHANNELS 2
-#define XAIEDMA_SHIM_CHNUM_S2MM0 0U
-#define XAIEDMA_SHIM_CHNUM_S2MM1 1U
-#define XAIEDMA_SHIM_CHNUM_MM2S0 2U
-#define XAIEDMA_SHIM_CHNUM_MM2S1 3U
 
 #define HIGH_ADDR(addr) ((addr & 0xffffffff00000000ULL) >> 32)
 #define LOW_ADDR(addr) (addr & 0x00000000ffffffffULL)
 
 #define ALIGN(_x, _size) (((_x) + (_size-1)) & ~(_size-1))
 
-#define LOGICAL_HERD_DMAS 16
+#define XAIE_ADDR_ARRAY_OFF 0
 
-// direction
-#define SHIM_DMA_S2MM 0
-#define SHIM_DMA_MM2S 1
+// there are 4 channels per DMA, 2 in each direction
+#define NUM_DMA_CH 4U
+#define NUM_SHIM_DMA_S2MM_CHANNELS 2
+#define NUM_SHIM_DMA_MM2S_CHANNELS 2
 
-#define NUM_SHIM_DMAS 16
-#define NUM_COL_DMAS 4
+// shimDMA directions and channels
+// directions
+#define SHIM_DMA_S2MM 0U
+#define SHIM_DMA_MM2S 1U
+// channels, there are 4 total with 2 in each direction
+#define SHIM_DMA_CHNUM(_dir, _chan) (((_dir) * 2U) + (_chan))
+#define SHIM_DMA_CHNUM_S2MM0 (SHIM_DMA_CHNUM((SHIM_DMA_S2MM),(0U)))
+#define SHIM_DMA_CHNUM_S2MM1 (SHIM_DMA_CHNUM((SHIM_DMA_S2MM),(1U)))
+#define SHIM_DMA_CHNUM_MM2S0 (SHIM_DMA_CHNUM((SHIM_DMA_MM2S),(0U)))
+#define SHIM_DMA_CHNUM_MM2S1 (SHIM_DMA_CHNUM((SHIM_DMA_MM2S),(1U)))
+#define SHIM_DMA_NUM_BDS 16U
+// statically allocate BD per channel
+#define SHIM_DMA_NUM_CH_BDS ((SHIM_DMA_NUM_BDS)/(NUM_DMA_CH))
+// there are 4 BDs per DMA channel, allocated statically
+#define NUM_DMA_CH_BDS 4U
+// base BD given a channel and direction
+// S2MM0 = 0, S2MM1 = 4, MM2S0 = 8, MM2S1 = 12
+#define SHIM_DMA_BASE_BD(_dir, _chan) (((_dir) * 8U) + ((_chan) * NUM_DMA_CH_BDS))
 
-#define INVLD_COUNT_TIMEOUT 100
-
+// DMAs in the array
+#define NUM_SHIM_DMAS 16U
+// columns with NOC tiles in AM015 not listed here are not connected
+// in the VCK5000 device
 uint8_t shim_dma_cols[NUM_SHIM_DMAS] = {2,  3,  6,  7,  10, 11, 18, 19,
                                         26, 27, 34, 35, 42, 43, 46, 47};
-uint8_t col_dma_cols[NUM_COL_DMAS] = {7, 8, 9, 10};
-
-#define NUM_DMAS (NUM_SHIM_DMAS + NUM_COL_DMAS)
+// Timeout handling
+#define INVLD_COUNT_TIMEOUT 100
 
 /*
  * Tile address format:
@@ -101,8 +100,6 @@ uint8_t col_dma_cols[NUM_COL_DMAS] = {7, 8, 9, 10};
 #define GET_COLUMN(_addr) (((_addr) >> AIE_COLUMN_SHIFT) & AIE_COLUMN_MASK)
 #define GET_ROW(_addr) (((_addr) >> AIE_ROW_SHIFT) & AIE_ROW_MASK)
 #define GET_TILE(_addr) ((_addr)&AIE_TILE_MASK)
-
-#define SHIM_DMA_NUM_BDS 16
 
 // AIE (ME) registers
 #define REG_AIE_DMA_BD_ADDR_A(_idx) (0x1D000 + (0x20 * _idx))
@@ -143,31 +140,37 @@ uint8_t col_dma_cols[NUM_COL_DMAS] = {7, 8, 9, 10};
 #define REG_SHIM_DMA_BD_BUF_LEN(_idx) (0x1D004 + (0x14 * _idx))
 #define REG_SHIM_DMA_BD_CTRL(_idx) (0x1D008 + (0x14 * _idx))
 #define SHIM_DMA_BD_CTRL_VALID (1 << 0)
-
 #define REG_SHIM_DMA_BD_AXI_CFG(_idx) (0x1D00C + (0x14 * _idx))
 #define REG_SHIM_DMA_BD_PKT(_idx) (0x1D010 + (0x14 * _idx))
-#define REG_SHIM_DMA_CTRL(_chan) (0x1D140 + (0x8 * _chan))
-#define REG_SHIM_DMA_START_QUEUE(_chan) (0x1D144 + (0x8 * _chan))
+
+#define REG_SHIM_DMA_S2MM_CTRL(_chan) (0x1D140 + (0x8 * _chan))
+#define REG_SHIM_DMA_S2MM_START_QUEUE(_chan) (0x1D144 + (0x8 * _chan))
+#define REG_SHIM_DMA_MMS2_CTRL(_chan) (0x1D150 + (0x8 * _chan))
+#define REG_SHIM_DMA_MMS2_START_QUEUE(_chan) (0x1D154 + (0x8 * _chan))
 
 #define REG_SHIM_DMA_S2MM_STATUS (0x1D160)
-#define SHIM_DMA_CURR_BD_SHIFT 16
+#define REG_SHIM_DMA_MM2S_STATUS (0x1D164)
+
+#define SHIM_DMA_QUEUE_OVERFLOW_1_SHIFT 29
+#define SHIM_DMA_QUEUE_OVERFLOW_0_SHIFT 28
+#define SHIM_DMA_QUEUE_OVERFLOW_WIDTH 1
+#define SHIM_DMA_QUEUE_OVERFLOW_MASK 1U
+#define SHIM_DMA_CURR_BD_1_SHIFT 20
+#define SHIM_DMA_CURR_BD_0_SHIFT 16
 #define SHIM_DMA_CURR_BD_WIDTH 4
 #define SHIM_DMA_CURR_BD_MASK ((1 << SHIM_DMA_CURR_BD_WIDTH) - 1)
-#define SHIM_DMA_QUEUE_SIZE_SHIFT 6
+#define SHIM_DMA_QUEUE_SIZE_1_SHIFT 9
+#define SHIM_DMA_QUEUE_SIZE_0_SHIFT 6
 #define SHIM_DMA_QUEUE_SIZE_WIDTH 3
 #define SHIM_DMA_QUEUE_SIZE_MASK ((1 << SHIM_DMA_QUEUE_SIZE_WIDTH) - 1)
-#define SHIM_DMA_STATUS_SHIFT 0
+#define SHIM_DMA_STALLED_1_SHIFT 5
+#define SHIM_DMA_STALLED_0_SHIFT 4
+#define SHIM_DMA_STALLED_WIDTH 1
+#define SHIM_DMA_STALLED_MASK 1U
+#define SHIM_DMA_STATUS_1_SHIFT 2
+#define SHIM_DMA_STATUS_0_SHIFT 0
 #define SHIM_DMA_STATUS_WIDTH 2
 #define SHIM_DMA_STATUS_MASK ((1 << SHIM_DMA_STATUS_WIDTH) - 1)
-#define SHIM_DMA_STALLED_SHIFT 4
-#define SHIM_DMA_STALLED_WIDTH 1
-#define SHIM_DMA_STALLED_MASK 1
-#define GET_SHIM_DMA(_field, _reg, _ch)                                        \
-  ((_reg) >>                                                                   \
-       (SHIM_DMA_##_field##_SHIFT + (SHIM_DMA_##_field##_WIDTH * (_ch))) &     \
-   SHIM_DMA_##_field##_MASK)
-
-#define REG_SHIM_DMA_MM2S_STATUS (0x1D164)
 
 #define REG_AIE_COL_RESET 0x00036048
 #define REG_SHIM_RESET_ENA 0x0003604C
@@ -175,7 +178,48 @@ uint8_t col_dma_cols[NUM_COL_DMAS] = {7, 8, 9, 10};
 #define REG_AIE_CORE_CTL_RESET (1U << 1)
 #define REG_AIE_CORE_CTL_ENABLE (1U << 0)
 
-#define SOFT_DMA_CTRL_BASE_ADDR 0x20180000000
+// The NPI registers we use to reset the array
+constexpr auto NPI_MASK_REG = 0x0;
+constexpr auto NPI_VAL_REG = 0x4;
+constexpr auto NPI_LOCK_REG = 0xC;
+
+struct HerdConfig {
+  uint32_t row_start;
+  uint32_t num_rows;
+  uint32_t col_start;
+  uint32_t num_cols;
+};
+
+struct HerdConfig HerdCfgInst;
+
+typedef struct staged_nd_memcpy_s {
+  uint32_t valid;
+  hsa_agent_dispatch_packet_t *pkt;
+  uint64_t paddr[3];
+  uint32_t index[3];
+} staged_nd_memcpy_t; // about 48B therefore @ 64 slots ~3kB
+
+// GLOBAL storage for 'in progress' ND memcpy work
+// TODO: this is only visible to a single CP as the CPs do not share
+//       globally defined variables in the firmware code
+// one slot per DMA for each (direction, channel) tuple
+// four slots per shim DMA
+staged_nd_memcpy_t staged_nd_slot[NUM_SHIM_DMAS * NUM_DMA_CH];
+
+//// GLOBAL for round-robin bd allocations
+// next_bd tracks the BD ID in range [0,3] for every channel of every shim DMA
+// this BD ID must be offset by the base slot to get the real BD to be used for
+// the given channel
+uint32_t next_bd[NUM_SHIM_DMAS * NUM_DMA_CH] = {0};
+
+aie_libxaie_ctx_t *_xaie;
+
+const uint64_t shmem_base = 0x020100000000ULL;
+
+// BP Core Managers
+std::vector<BPCoreMgr*> bp_core_mgrs;
+
+// Functions
 
 inline uint64_t mymod(uint64_t a) {
   uint64_t result = a;
@@ -193,26 +237,7 @@ void packet_set_active(hsa_agent_dispatch_packet_t *pkt, bool b) {
   pkt->reserved2 = (pkt->reserved2 & ~0x1) | b;
 }
 
-constexpr uint32_t NUM_BD = 16;
-
-#ifdef ARM_CONTROLLER
-// The NPI registers we use to reset the array
-constexpr auto NPI_MASK_REG = 0x0;
-constexpr auto NPI_VAL_REG = 0x4;
-constexpr auto NPI_LOCK_REG = 0xC;
-#endif // ARM_CONTROLLER
-
-struct HerdConfig {
-  uint32_t row_start;
-  uint32_t num_rows;
-  uint32_t col_start;
-  uint32_t num_cols;
-};
-
-HerdConfig HerdCfgInst;
-
-#ifdef ARM_CONTROLLER
-aie_libxaie_ctx_t *_xaie;
+uint64_t get_base_address(void) { return shmem_base; }
 
 /*
   read 32 bit value from specified address
@@ -249,45 +274,195 @@ uint32_t maskpoll32(uint64_t Addr, uint32_t Mask, uint32_t Value, uint32_t TimeO
   Calculate the address of an AIE tile
 */
 uint64_t getTileAddr(uint16_t ColIdx, uint16_t RowIdx) {
-#ifdef ARM_CONTROLLER
   uint64_t my_ta = (uint64_t)(AIE_BASE | (ColIdx << AIE_COLUMN_SHIFT) |
                     (RowIdx << AIE_ROW_SHIFT));
   return my_ta;
-#else
-  uint64_t TileAddr = 0;
-  uint64_t ArrOffset = XAIE_ADDR_ARRAY_OFF;
-
-#ifdef XAIE_BASE_ARRAY_ADDR_OFFSET
-  ArrOffset = XAIE_BASE_ARRAY_ADDR_OFFSET;
-#endif
-
-  /*
-   * Tile address format:
-   * --------------------------------------------
-   * |                7 bits  5 bits   18 bits  |
-   * --------------------------------------------
-   * | Array offset | Column | Row | Tile addr  |
-   * --------------------------------------------
-   */
-  TileAddr = (uint64_t)((ArrOffset << XAIEGBL_TILE_ADDR_ARR_SHIFT) |
-                   (ColIdx << XAIEGBL_TILE_ADDR_COL_SHIFT) |
-                   (RowIdx << XAIEGBL_TILE_ADDR_ROW_SHIFT));
-
-  return TileAddr;
-#endif
 }
 
-static const char *decode_dma_state(uint32_t state) {
-  switch (state) {
-  case 0:
-    return "idle";
-  case 1:
-    return "starting";
-  case 2:
-    return "running";
+/*
+ * Check if specific shimDMA at given tile is idle
+ * shimDMA is specified by a direction (S2MM or MM2S) and channel (0 or 1)
+ * returns true when wait completes, false on timeout
+ */
+bool shim_dma_wait_idle(uint64_t TileAddr, int direction, int channel, uint32_t ctrl_id) {
+  uint32_t status_register_offset;
+  uint32_t status_mask_shift;
+  uint32_t start_queue_size_mask_shift;
+  if (channel == 0) {
+    status_mask_shift = SHIM_DMA_STATUS_0_SHIFT;
+    start_queue_size_mask_shift = SHIM_DMA_QUEUE_SIZE_0_SHIFT;
+  } else {
+    status_mask_shift = SHIM_DMA_STATUS_1_SHIFT;
+    start_queue_size_mask_shift = SHIM_DMA_QUEUE_SIZE_1_SHIFT;
   }
-  return "unknown";
+
+  if (direction == SHIM_DMA_S2MM) {
+    status_register_offset = REG_SHIM_DMA_S2MM_STATUS;
+  } else {
+    status_register_offset = REG_SHIM_DMA_MM2S_STATUS;
+  }
+
+  // Will timeout if shim is busy
+  uint32_t timeout_count = 0;
+  uint32_t timeout_val = 10000;
+  uint32_t status = 0x3; // reserved status
+  uint32_t status_reg = in32(TileAddr + status_register_offset);
+  uint32_t queue_size = (status_reg >> start_queue_size_mask_shift) & SHIM_DMA_QUEUE_SIZE_MASK;
+
+  while (queue_size) {
+    // fetch status and check
+    status_reg = in32(TileAddr + status_register_offset);
+    status = (status_reg >> status_mask_shift) & SHIM_DMA_STATUS_MASK;
+    queue_size = (status_reg >> start_queue_size_mask_shift) & SHIM_DMA_QUEUE_SIZE_MASK;
+
+    if (timeout_count >= timeout_val) {
+      air_printf("[WARNING] shim_dma_wait_idle timed out\r\n");
+      return false;
+    }
+    timeout_count++;
+  }
+
+  return true;
 }
+
+/*
+ * Query specific shimDMA start queue size
+ * shimDMA is specified by a direction (S2MM or MM2S) and channel (0 or 1)
+ */
+inline uint32_t shim_dma_get_outstanding(uint64_t TileAddr, int direction,
+                                       int channel) {
+  uint32_t status_register_offset;
+  uint32_t start_queue_size_mask_shift;
+  if (channel == 0) {
+    start_queue_size_mask_shift = SHIM_DMA_QUEUE_SIZE_0_SHIFT;
+  } else {
+    start_queue_size_mask_shift = SHIM_DMA_QUEUE_SIZE_1_SHIFT;
+  }
+  if (direction == SHIM_DMA_S2MM) {
+    status_register_offset = REG_SHIM_DMA_S2MM_STATUS;
+  } else {
+    status_register_offset = REG_SHIM_DMA_MM2S_STATUS;
+  }
+  uint32_t status_reg = in32(TileAddr + status_register_offset);
+  uint32_t outstanding = (status_reg >> start_queue_size_mask_shift) & SHIM_DMA_QUEUE_SIZE_MASK;
+  return outstanding;
+}
+
+/*
+ * returns true if the number of outstanding BDs (BDs in start queue)
+ */
+inline bool shim_dma_can_push_bd(uint64_t TileAddr, int direction, int channel) {
+  // TODO: does BD ID being dequeued from start queue for the channel imply that
+  // it is safe to overwrite the underlying BD?
+  return (shim_dma_get_outstanding(TileAddr, direction, channel) < (NUM_DMA_CH_BDS-1));
+}
+
+/*
+ * Query shimDMA status
+ * shimDMA is specified by a direction (S2MM or MM2S) and channel (0 or 1)
+ */
+inline uint32_t shim_dma_get_status(uint64_t TileAddr, int direction, int channel) {
+  uint32_t status_register_offset;
+  uint32_t status_mask_shift;
+  if (channel == 0) {
+    status_mask_shift = SHIM_DMA_STATUS_0_SHIFT;
+  } else {
+    status_mask_shift = SHIM_DMA_STATUS_1_SHIFT;
+  }
+  if (direction == SHIM_DMA_S2MM) {
+    status_register_offset = REG_SHIM_DMA_S2MM_STATUS;
+  } else {
+    status_register_offset = REG_SHIM_DMA_MM2S_STATUS;
+  }
+  uint32_t status_reg = in32(TileAddr + status_register_offset);
+  uint32_t status = (status_reg >> status_mask_shift) & SHIM_DMA_STATUS_MASK;
+  return status;
+}
+
+/*
+ * Push a BD to a shimDMA
+ * shimDMA is specified by a direction (S2MM or MM2S) and channel (0 or 1)
+ */
+void shim_dma_push_bd(uint64_t TileAddr, uint32_t slot, int direction, int channel,
+                      uint16_t col, uint64_t addr, uint32_t len, uint32_t ctrl_id) {
+
+  uint32_t status_mask_shift;
+  if (channel == 0) {
+    status_mask_shift = SHIM_DMA_STATUS_0_SHIFT;
+  } else {
+    status_mask_shift = SHIM_DMA_STATUS_1_SHIFT;
+  }
+
+  uint32_t status_register_offset;
+  uint32_t control_register_offset;
+  uint32_t start_queue_register_offset;
+  if (direction == SHIM_DMA_S2MM) {
+    status_register_offset = REG_SHIM_DMA_S2MM_STATUS;
+    control_register_offset = REG_SHIM_DMA_S2MM_CTRL(channel);
+    start_queue_register_offset = REG_SHIM_DMA_S2MM_START_QUEUE(channel);
+    air_printf("\n\r  S2MM Shim DMA %d start channel %d\n\r", col, channel);
+  } else {
+    status_register_offset = REG_SHIM_DMA_MM2S_STATUS;
+    control_register_offset = REG_SHIM_DMA_MMS2_CTRL(channel);
+    start_queue_register_offset = REG_SHIM_DMA_MMS2_START_QUEUE(channel);
+    air_printf("\n\r  MM2S Shim DMA %d start channel %d\n\r", col, channel);
+  }
+
+  uint32_t outstanding = shim_dma_get_outstanding(TileAddr, direction, channel);
+  air_printf("Outstanding pre : %d\n\r", outstanding);
+
+  // lookup the next BD ID to use for this channel and offset
+  // by the channel's base BD ID
+  uint32_t bd = next_bd[slot] + SHIM_DMA_BASE_BD(direction, channel);
+  // advance the BD tracking
+  next_bd[slot] = (next_bd[slot] == (NUM_DMA_CH_BDS-1)) ? 0 : next_bd[slot] + 1;
+  air_printf("Selected bd %u for slot %u\n\r", bd, slot);
+
+  // Push the BD
+
+  // Mark the BD as invalid
+  out32(TileAddr + REG_SHIM_DMA_BD_CTRL(bd), 0);
+
+  // Set the registers directly ...
+  out32(TileAddr + REG_SHIM_DMA_BD_ADDR(bd), LOW_ADDR(addr));
+
+  // change length in bytes to 32 bit words
+  out32(TileAddr + REG_SHIM_DMA_BD_BUF_LEN(bd), len >> 2);
+
+  uint32_t control = (HIGH_ADDR(addr) << 16) | SHIM_DMA_BD_CTRL_VALID;
+  out32(TileAddr + REG_SHIM_DMA_BD_CTRL(bd), control);
+  out32(TileAddr + REG_SHIM_DMA_BD_AXI_CFG(bd),
+        0x410); // Burst len [10:9] = 2 (16)
+                // QoS [8:5] = 0 (best effort)
+                // Secure bit [4] = 1 (set)
+
+  out32(TileAddr + REG_SHIM_DMA_BD_PKT(bd), 0);
+
+  // Check if the channel is running or not
+  uint32_t status_reg = in32(TileAddr + status_register_offset);
+  uint32_t precheck_status = (status_reg >> status_mask_shift) & SHIM_DMA_STATUS_MASK;
+
+  if (precheck_status == 0b00) {
+    // Stream traffic can run, we can issue AXI-MM, and the channel is enabled
+    air_printf("Enabling shim DMA [%u] channel %u\r\n", col, channel);
+    out32(TileAddr + control_register_offset, 0x1);
+  }
+
+  air_printf("Pushing bd %u into 0x%lx\r\n", bd,
+             TileAddr + start_queue_register_offset);
+
+  // push
+  out32(TileAddr + start_queue_register_offset, bd);
+
+  // debug print
+  outstanding = shim_dma_get_outstanding(TileAddr, direction, channel);
+  air_printf("Outstanding post: %d\n\r", outstanding);
+}
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////
 
 void mlir_aie_init_libxaie(aie_libxaie_ctx_t *ctx) {
   if (!ctx)
@@ -365,422 +540,16 @@ int mlir_aie_reinit_device(aie_libxaie_ctx_t *ctx) {
   return 0;
 }
 
-void mlir_aie_print_dma_status(int col, int row) {
-  uint64_t tileAddr = getTileAddr(col, row);
-
-  uint32_t dma_s2mm0_control = in32(tileAddr + 0x0001DE00);
-  uint32_t dma_s2mm1_control = in32(tileAddr + 0x0001DE08);
-  uint32_t dma_mm2s0_control = in32(tileAddr + 0x0001DE10);
-  uint32_t dma_mm2s1_control = in32(tileAddr + 0x0001DE18);
-  uint32_t dma_s2mm_status = in32(tileAddr + 0x0001DF00);
-  uint32_t dma_mm2s_status = in32(tileAddr + 0x0001DF10);
-
-  uint32_t s2mm_ch0_running = dma_s2mm_status & 0x3;
-  uint32_t s2mm_ch1_running = (dma_s2mm_status >> 2) & 0x3;
-  uint32_t mm2s_ch0_running = dma_mm2s_status & 0x3;
-  uint32_t mm2s_ch1_running = (dma_mm2s_status >> 2) & 0x3;
-
-  xil_printf("DMA [%d, %d] tile addr=0x%lx\r\n", col, row, tileAddr);
-  xil_printf("  mm2s (0=%s 1=%s) status=%08X ctrl0=%02X ctrl1=%02X\r\n",
-             decode_dma_state(mm2s_ch0_running),
-             decode_dma_state(mm2s_ch1_running), dma_mm2s_status,
-             dma_mm2s0_control, dma_mm2s1_control);
-  xil_printf("  s2mm (0=%s 1=%s) status=%08X ctrl0=%02X ctrl1=%02X\r\n",
-             decode_dma_state(s2mm_ch0_running),
-             decode_dma_state(s2mm_ch1_running), dma_s2mm_status,
-             dma_s2mm0_control, dma_s2mm1_control);
-
-  xil_printf("Descriptors:\r\n");
-  for (uint32_t bd = 0; bd < NUM_BD; bd++) {
-    uint32_t dma_bd_addr_a = in32(tileAddr + REG_AIE_DMA_BD_ADDR_A(bd));
-    uint32_t dma_bd_control = in32(tileAddr + REG_AIE_DMA_BD_CTL(bd));
-    if (dma_bd_control & AIE_DMA_BD_CTL_VALID) {
-      xil_printf("BD %d valid\n\r", bd);
-      uint32_t current_s2mm_ch0 = (dma_s2mm_status >> 16) & 0xf;
-      uint32_t current_s2mm_ch1 = (dma_s2mm_status >> 20) & 0xf;
-      uint32_t current_mm2s_ch0 = (dma_mm2s_status >> 16) & 0xf;
-      uint32_t current_mm2s_ch1 = (dma_mm2s_status >> 20) & 0xf;
-
-      if (s2mm_ch0_running && bd == current_s2mm_ch0) {
-        xil_printf(" * Current BD for s2mm channel 0\n\r");
-      }
-      if (s2mm_ch1_running && bd == current_s2mm_ch1) {
-        xil_printf(" * Current BD for s2mm channel 1\n\r");
-      }
-      if (mm2s_ch0_running && bd == current_mm2s_ch0) {
-        xil_printf(" * Current BD for mm2s channel 0\n\r");
-      }
-      if (mm2s_ch1_running && bd == current_mm2s_ch1) {
-        xil_printf(" * Current BD for mm2s channel 1\n\r");
-      }
-
-      if (dma_bd_control & AIE_DMA_BD_CTL_ENA_PKT) {
-        uint32_t dma_packet = in32(tileAddr + REG_AIE_DMA_BD_PKT(bd));
-        xil_printf("   Packet mode: %02X\n\r", dma_packet & AIE_DMA_BD_PKT_ID);
-      }
-      int words_to_transfer = 1 + (dma_bd_control & AIE_DMA_BD_CTL_LEN);
-      int base_address = dma_bd_addr_a & AIE_DMA_BD_ADDR_BASE;
-      xil_printf("   Transfering %d 32 bit words to/from %06X\n\r",
-                 words_to_transfer, base_address);
-
-      xil_printf("   ");
-      for (int w = 0; w < 7; w++) {
-        uint32_t tmpd = in32(tileAddr + (base_address << 2) + (w * 4));
-        xil_printf("%08X ", tmpd);
-      }
-      xil_printf("\n\r");
-      if (dma_bd_addr_a & AIE_DMA_BD_ADDR_ENA_ACQ) {
-        uint32_t lock_id = (dma_bd_addr_a >> 22) & 0xf;
-        xil_printf("   Acquires lock %d ", lock_id);
-        if (dma_bd_addr_a & 0x10000)
-          xil_printf("with value %d ", (dma_bd_addr_a >> 17) & 0x1);
-
-        xil_printf("currently ");
-        uint32_t locks = in32(tileAddr + 0x0001EF00);
-        uint32_t two_bits = (locks >> (lock_id * 2)) & 0x3;
-        if (two_bits) {
-          uint32_t acquired = two_bits & 0x1;
-          uint32_t value = two_bits & 0x2;
-          if (acquired)
-            xil_printf("Acquired ");
-          xil_printf(value ? "1" : "0");
-        } else
-          xil_printf("0");
-        xil_printf("\n\r");
-      }
-      if (dma_bd_control & 0x30000000) { // FIFO MODE
-        int FIFO = (dma_bd_control >> 28) & 0x3;
-        uint32_t dma_fifo_counter = in32(tileAddr + 0x0001DF20);
-        xil_printf("   Using FIFO Cnt%d : %08X\n\r", FIFO, dma_fifo_counter);
-      }
-      uint32_t nextBd = ((dma_bd_control >> 13) & 0xF);
-      uint32_t useNextBd = ((dma_bd_control >> 17) & 0x1);
-      xil_printf("   Next BD: %d %s\r\n", nextBd,
-                 (useNextBd == 0) ? "(unused)" : "(used)");
-    }
+static const char *decode_dma_state(uint32_t state) {
+  switch (state) {
+  case 0:
+    return "idle";
+  case 1:
+    return "starting";
+  case 2:
+    return "running";
   }
-}
-
-/*
-  The shim tile is always row 0
-*/
-void mlir_aie_print_shimdma_status(uint16_t col) {
-  uint64_t tileAddr = getTileAddr(col, 0);
-  uint32_t s2mm_status = in32(tileAddr + REG_SHIM_DMA_S2MM_STATUS);
-  uint32_t mm2s_status = in32(tileAddr + REG_SHIM_DMA_MM2S_STATUS);
-
-  xil_printf("Shim DMA [%u]\r\n", col);
-  xil_printf("S2MM\r\n");
-  for (uint8_t channel = 0; channel < NUM_SHIM_DMA_S2MM_CHANNELS; channel++) {
-    xil_printf("   [channel %u] start_bd=%u queue_size=%u curr_bd=%u status=%s "
-               "stalled=%s\r\n",
-               channel, in32(tileAddr + REG_SHIM_DMA_START_QUEUE(channel)),
-               GET_SHIM_DMA(QUEUE_SIZE, s2mm_status, channel),
-               GET_SHIM_DMA(CURR_BD, s2mm_status, channel),
-               GET_SHIM_DMA(STATUS, s2mm_status, channel),
-               GET_SHIM_DMA(STALLED, s2mm_status, channel));
-  }
-  xil_printf("MM2S\r\n");
-  for (uint8_t channel = 0; channel < NUM_SHIM_DMA_MM2S_CHANNELS; channel++) {
-    xil_printf("   [channel %u] start_bd=%u queue_size=%u curr_bd=%u status=%s "
-               "stalled=%s\r\n",
-               channel, in32(tileAddr + REG_SHIM_DMA_START_QUEUE(channel)),
-               GET_SHIM_DMA(QUEUE_SIZE, mm2s_status, channel),
-               GET_SHIM_DMA(CURR_BD, mm2s_status, channel),
-               GET_SHIM_DMA(STATUS, mm2s_status, channel),
-               GET_SHIM_DMA(STALLED, mm2s_status, channel));
-  }
-
-  xil_printf("Descriptors:\r\n");
-  for (int bd = 0; bd < 16; bd++) {
-    uint64_t bd_addr_a = in32(tileAddr + REG_SHIM_DMA_BD_ADDR(bd));
-    uint32_t dma_bd_buffer_length = in32(tileAddr + REG_SHIM_DMA_BD_BUF_LEN(bd));
-    uint32_t dma_bd_control = in32(tileAddr + REG_SHIM_DMA_BD_CTRL(bd));
-
-    xil_printf("[%02d] ", bd);
-    if (dma_bd_control & SHIM_DMA_BD_CTRL_VALID)
-      xil_printf("valid ");
-
-    int words_to_transfer = dma_bd_buffer_length;
-    uint64_t base_address =
-        (uint64_t)bd_addr_a + ((uint64_t)((dma_bd_control >> 16) & 0xFFFF) << 32);
-    xil_printf("   Transferring %d 32 bit words to/from %08lX\n\r",
-               words_to_transfer, base_address);
-
-    int use_next_bd = ((dma_bd_control >> 15) & 0x1);
-    int next_bd = ((dma_bd_control >> 11) & 0xF);
-    int lockID = ((dma_bd_control >> 7) & 0xF);
-    int enable_lock_release = ((dma_bd_control >> 6) & 0x1);
-    int lock_release_val = ((dma_bd_control >> 5) & 0x1);
-    int use_release_val = ((dma_bd_control >> 4) & 0x1);
-    int enable_lock_acquire = ((dma_bd_control >> 3) & 0x1);
-    int lock_acquire_val = ((dma_bd_control >> 2) & 0x1);
-    int use_acquire_val = ((dma_bd_control >> 1) & 0x1);
-
-    xil_printf("next=%d, use_next=%d ", next_bd, use_next_bd);
-    xil_printf("lock: %d, acq(en: %d, val: %d, use: %d), rel(en: %d, val: %d, "
-               "use: %d)\r\n",
-               lockID, enable_lock_acquire, lock_acquire_val, use_acquire_val,
-               enable_lock_release, lock_release_val, use_release_val);
-  }
-}
-
-/// Print the status of a core represented by the given tile, at the given
-/// coordinates.
-void mlir_aie_print_tile_status(int col, int row) {
-  uint32_t trace_status;
-  uint32_t status, coreTimerLow, PC, LR, SP, locks, R0, R4;
-  uint64_t tileAddr = getTileAddr(col, row);
-
-  status = in32(tileAddr + REG_AIE_CORE_STATUS);
-  coreTimerLow = in32(tileAddr + 0x0340F8);
-  PC = in32(tileAddr + 0x00030280);
-  LR = in32(tileAddr + 0x000302B0);
-  SP = in32(tileAddr + 0x000302A0);
-  locks = in32(tileAddr + 0x0001EF00);
-  trace_status = in32(tileAddr + 0x000140D8);
-  R0 = in32(tileAddr + 0x00030000);
-  R4 = in32(tileAddr + 0x00030040);
-
-  xil_printf("Core [%d, %d] addr is 0x%08lX\n\r", col, row, tileAddr);
-  xil_printf(
-      "Core [%d, %d] status is 0x%08X, timer is %u, PC is 0x%08X, locks are "
-      "%08X, LR is %08X, SP is %08X, R0 is %08X,R4 is %08X\n\r",
-      col, row, status, coreTimerLow, PC, locks, LR, SP, R0, R4);
-  xil_printf("Core [%d, %d] trace status is %08X\n\r", col, row, trace_status);
-
-  for (int lock = 0; lock < 16; lock++) {
-    uint32_t two_bits = (locks >> (lock * 2)) & 0x3;
-    if (two_bits) {
-      xil_printf("Lock %d: ", lock);
-      uint32_t acquired = two_bits & 0x1;
-      uint32_t value = two_bits & 0x2;
-      if (acquired)
-        xil_printf("Acquired ");
-      xil_printf(value ? "1" : "0");
-      xil_printf("\n\r");
-    }
-  }
-
-  const char *core_status_strings[] = {"Enabled",
-                                       "In Reset",
-                                       "Memory Stall S",
-                                       "Memory Stall W",
-                                       "Memory Stall N",
-                                       "Memory Stall E",
-                                       "Lock Stall S",
-                                       "Lock Stall W",
-                                       "Lock Stall N",
-                                       "Lock Stall E",
-                                       "Stream Stall S",
-                                       "Stream Stall W",
-                                       "Stream Stall N",
-                                       "Stream Stall E",
-                                       "Cascade Stall Master",
-                                       "Cascade Stall Slave",
-                                       "Debug Halt",
-                                       "ECC Error",
-                                       "ECC Scrubbing",
-                                       "Error Halt",
-                                       "Core Done"};
-  xil_printf("Core Status: ");
-  for (int i = 0; i <= 20; i++) {
-    if ((status >> i) & 0x1)
-      xil_printf("%s ", core_status_strings[i]);
-  }
-  xil_printf("\r\n");
-}
-
-#endif
-
-int xaie_shim_dma_wait_idle(uint64_t TileAddr, int direction, int channel) {
-  uint32_t shimDMAchannel = channel;
-  uint32_t status_register_offset;
-  uint32_t status_mask_shift;
-  if (channel == 0) {
-    status_mask_shift = 0;
-  } else {
-    status_mask_shift = 2;
-  }
-  if (direction == SHIM_DMA_S2MM) {
-    shimDMAchannel += XAIEDMA_SHIM_CHNUM_S2MM0;
-    status_register_offset = 0x1d160;
-  } else {
-    shimDMAchannel += XAIEDMA_SHIM_CHNUM_MM2S0;
-    status_register_offset = 0x1d164;
-  }
-
-  // Will timeout if shim is busy
-  uint32_t timeout_count = 0;
-  uint32_t timeout_val = 100;
-  while ((in32(TileAddr + status_register_offset) >> status_mask_shift) &
-         0b11) {
-    if (timeout_count >= timeout_val) {
-      air_printf("[WARNING] xaie_shim_dma_wait_idle timed out\r\n");
-      return 1;
-    }
-    timeout_count++;
-  }
-
-  return 0;
-}
-
-uint32_t xaie_shim_dma_get_outstanding(uint64_t TileAddr, int direction,
-                                       int channel) {
-  uint32_t shimDMAchannel = channel;
-  uint32_t status_register_offset;
-  uint32_t start_queue_size_mask_shift;
-  if (channel == 0) {
-    start_queue_size_mask_shift = 6;
-  } else {
-    start_queue_size_mask_shift = 9;
-  }
-  if (direction == SHIM_DMA_S2MM) {
-    shimDMAchannel += XAIEDMA_SHIM_CHNUM_S2MM0;
-    status_register_offset = 0x1d160;
-  } else {
-    shimDMAchannel += XAIEDMA_SHIM_CHNUM_MM2S0;
-    status_register_offset = 0x1d164;
-  }
-  uint32_t outstanding =
-      (in32(TileAddr + status_register_offset) >> start_queue_size_mask_shift) &
-      0b111;
-  return outstanding;
-}
-
-//// GLOBAL for shim DMAs mapped to the controller
-// uint16_t mappedShimDMA[2] = {0};
-//// GLOBAL for round-robin bd locations
-// uint32_t last_bd[4][2] = {0};
-uint32_t last_bd[8] = {0};
-
-int xaie_shim_dma_push_bd(uint64_t TileAddr, int direction, int channel,
-                          uint16_t col, uint64_t addr, uint32_t len) {
-  uint32_t shimDMAchannel = channel; // Need
-  uint32_t status_register_offset;
-  uint32_t status_mask_shift;
-  uint32_t control_register_offset;
-  uint32_t start_queue_register_offset;
-  uint32_t start_queue_size_mask_shift;
-
-  if (direction == SHIM_DMA_S2MM) {
-    shimDMAchannel += XAIEDMA_SHIM_CHNUM_S2MM0;
-    status_register_offset = 0x1d160;
-    if (channel == 0) {
-      status_mask_shift = 0;
-      control_register_offset = 0x1d140;
-      start_queue_register_offset = 0x1d144;
-      start_queue_size_mask_shift = 6;
-    } else {
-      status_mask_shift = 2;
-      control_register_offset = 0x1d148;
-      start_queue_register_offset = 0x1d14c;
-      start_queue_size_mask_shift = 9;
-    }
-    air_printf("\n\r  S2MM Shim DMA %d start channel %d\n\r", col,
-               shimDMAchannel);
-    // air_printf("\n\r  S2MM Shim DMA %d start channel %d\n\r",
-    // mappedShimDMA[dma], shimDMAchannel);
-  } else {
-    shimDMAchannel += XAIEDMA_SHIM_CHNUM_MM2S0;
-    status_register_offset = 0x1d164;
-    if (channel == 0) {
-      status_mask_shift = 0;
-      control_register_offset = 0x1d150;
-      start_queue_register_offset = 0x1d154;
-      start_queue_size_mask_shift = 6;
-    } else {
-      status_mask_shift = 2;
-      control_register_offset = 0x1d158;
-      start_queue_register_offset = 0x1d15c;
-      start_queue_size_mask_shift = 9;
-    }
-    air_printf("\n\r  MM2S Shim DMA %d start channel %d\n\r", col,
-               shimDMAchannel);
-    // air_printf("\n\r  MM2S Shim DMA %d start channel %d\n\r",
-    // mappedShimDMA[dma], shimDMAchannel);
-  }
-
-  uint32_t start_bd = 4 * shimDMAchannel; // shimDMAchannel<<2;
-  uint32_t outstanding =
-      (in32(TileAddr + status_register_offset) >> start_queue_size_mask_shift) &
-      0b111;
-  // If outstanding >=4, we're in trouble!!!!
-  // Theoretically this should never occur due to check in do_packet_nd_memcpy
-  if (outstanding >= 4) { // NOTE had this at 3? // What is proper 'stalled'
-                          // threshold? if (outstanding >=4)
-    air_printf("\n\r *** BD OVERFLOW in shimDMA channel %d *** \n\r",
-               shimDMAchannel);
-    bool waiting = true;
-    while (waiting) {
-      outstanding = (in32(TileAddr + status_register_offset) >>
-                     start_queue_size_mask_shift) &
-                    0b111;
-      waiting = (outstanding > 3); // NOTE maybe >= 3
-      air_printf("*** Stalled in shimDMA channel %d outstanding = %d *** \n\r",
-                 shimDMAchannel, outstanding + 1);
-    } // WARNING this can lead to an endless loop
-  }
-  air_printf("Outstanding pre : %d\n\r", outstanding);
-  // uint32_t bd = start_bd+outstanding;// + 0; // HACK
-  int slot = channel;
-  slot += ((col % 2) == 1) ? 4 : 0;
-  if (direction == SHIM_DMA_S2MM)
-    slot += XAIEDMA_SHIM_CHNUM_S2MM0;
-  else
-    slot += XAIEDMA_SHIM_CHNUM_MM2S0;
-  uint32_t bd = start_bd + last_bd[slot];
-  last_bd[slot] = (last_bd[slot] == 3) ? 0 : last_bd[slot] + 1;
-
-  // Mark the BD as invalid
-  out32(TileAddr + REG_SHIM_DMA_BD_CTRL(bd), 0);
-
-  // Set the registers directly ...
-  out32(TileAddr + REG_SHIM_DMA_BD_ADDR(bd), LOW_ADDR(addr));
-
-  // change length in bytes to 32 bit words
-  out32(TileAddr + REG_SHIM_DMA_BD_BUF_LEN(bd), len >> 2);
-
-  uint32_t control = (HIGH_ADDR(addr) << 16) | SHIM_DMA_BD_CTRL_VALID;
-  out32(TileAddr + REG_SHIM_DMA_BD_CTRL(bd), control);
-  out32(TileAddr + REG_SHIM_DMA_BD_AXI_CFG(bd),
-        0x410); // Burst len [10:9] = 2 (16)
-                // QoS [8:5] = 0 (best effort)
-                // Secure bit [4] = 1 (set)
-
-  out32(TileAddr + REG_SHIM_DMA_BD_PKT(bd), 0);
-
-  // Check if the channel is running or not
-  uint32_t precheck_status =
-      (in32(TileAddr + status_register_offset) >> status_mask_shift) & 0b11;
-  if (precheck_status == 0b00) {
-    // Stream traffic can run, we can issue AXI-MM, and the channel is enabled
-    air_printf("Enabling shim DMA [%u] channel %u\r\n", col, channel);
-    out32(TileAddr + control_register_offset, 0x1);
-  }
-
-  // Now push into the queue
-  air_printf("Pushing bd %u into 0x%lx\r\n", bd,
-             TileAddr + start_queue_register_offset);
-  out32(TileAddr + start_queue_register_offset, bd);
-
-#if CHATTY
-  outstanding =
-      (in32(TileAddr + status_register_offset) >> start_queue_size_mask_shift) &
-      0b111;
-  air_printf("Outstanding post: %d\n\r", outstanding);
-  air_printf("bd pushed as bd %u\r\n", bd);
-
-  if (direction == SHIM_DMA_S2MM) {
-    air_printf("  End of S2MM Shim DMA %d start channel %d\n\r", col,
-               shimDMAchannel);
-  } else {
-    air_printf("  End of MM2S Shim DMA %d start channel %d\n\r", col,
-               shimDMAchannel);
-  }
-#endif
-
-  return 1;
+  return "unknown";
 }
 
 int xaie_lock_release(uint16_t col, uint16_t row, uint32_t lock_id, uint32_t val) {
@@ -835,8 +604,6 @@ int xaie_lock_acquire_nb(uint16_t col, uint16_t row, uint32_t lock_id, uint32_t 
   return 1;
 }
 
-#ifdef ARM_CONTROLLER
-
 void xaie_array_reset() {
 
   // Getting a pointer to NPI
@@ -882,8 +649,6 @@ void xaie_strobe_shim_reset() {
   air_printf("Done with shim reset\r\n");
 }
 
-#endif
-
 /*
   Reset all of the ME tiles in the specified column
 */
@@ -900,7 +665,7 @@ void xaie_shim_dma_init(uint16_t col) {
   uint64_t tileAddr = getTileAddr(col, 0);
   // Disable all channels
   for (uint8_t ch = 0; ch < 4; ch++) {
-    out32(tileAddr + REG_SHIM_DMA_CTRL(ch), 0);
+    out32(tileAddr + REG_SHIM_DMA_S2MM_CTRL(ch), 0);
   }
   for (uint8_t bd = 0; bd < SHIM_DMA_NUM_BDS; bd++) {
     out32(tileAddr + REG_SHIM_DMA_BD_CTRL(bd), 0);
@@ -929,11 +694,9 @@ void xaie_device_init(void) {
   // First, resetting the entire device
   xaie_array_reset();
 
-#ifdef ARM_CONTROLLER
   int err = mlir_aie_reinit_device(_xaie);
   if (err)
     xil_printf("ERROR initializing device.\n\r");
-#endif
 
   for (int c = 0; c < NUM_SHIM_DMAS; c++) {
     xaie_shim_dma_init(shim_dma_cols[c]);
@@ -946,6 +709,27 @@ void xaie_device_init(void) {
   }
 }
 
+/*
+  Put a tile into reset
+*/
+void aie_tile_reset(int col, int row) {
+  uint64_t tileAddr = getTileAddr(col, row);
+  out32(tileAddr + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_RESET);
+}
+
+/*
+  Take a tile out of reset
+*/
+void aie_tile_enable(int col, int row) {
+  uint64_t tileAddr = getTileAddr(col, row);
+  out32(tileAddr + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_ENABLE);
+}
+
+void handle_packet_device_initialize(hsa_agent_dispatch_packet_t *pkt) {
+  packet_set_active(pkt, true);
+  xaie_device_init();
+}
+
 // Initialize one segment with lower left corner at (col_start, row_start)
 void xaie_segment_init(uint16_t start_col, uint16_t num_cols,
                        uint16_t start_row, uint16_t num_rows) {
@@ -953,7 +737,6 @@ void xaie_segment_init(uint16_t start_col, uint16_t num_cols,
   HerdCfgInst.num_cols = num_cols;
   HerdCfgInst.row_start = start_row;
   HerdCfgInst.num_rows = num_rows;
-#ifdef ARM_CONTROLLER
 
   // Performing the shim reset
   air_printf("Performing shim reset; start_col=%u num_cols=%u\r\n", start_col,
@@ -973,67 +756,9 @@ void xaie_segment_init(uint16_t start_col, uint16_t num_cols,
   for (uint16_t c = start_col; c < start_col + num_cols; c++)
     aie_reset_column(c);
 
-#endif
-}
-
-const uint64_t shmem_base = 0x020100000000ULL;
-
-/*
-  Put a tile into reset
-*/
-void aie_tile_reset(int col, int row) {
-  uint64_t tileAddr = getTileAddr(col, row);
-  out32(tileAddr + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_RESET);
-}
-
-/*
-  Take a tile out of reset
-*/
-void aie_tile_enable(int col, int row) {
-  uint64_t tileAddr = getTileAddr(col, row);
-  out32(tileAddr + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_ENABLE);
-}
-
-bool setup;
-
-uint64_t get_base_address(void) { return shmem_base; }
-
-void lock_uart(uint32_t id) {
-// ARM has seperate UART so doesn't use lock
-#ifndef ARM_CONTROLLER
-  XMutex_Lock(xmutex_ptr, XPAR_MUTEX_0_UART_LOCK, id);
-#endif
-}
-
-void unlock_uart(uint32_t id) {
-// ARM has seperate UART so doesn't use lock
-#ifndef ARM_CONTROLLER
-  XMutex_Unlock(xmutex_ptr, XPAR_MUTEX_0_UART_LOCK, id);
-#endif
-}
-
-void complete_agent_dispatch_packet(hsa_agent_dispatch_packet_t *pkt) {
-  // completion phase
-  packet_set_active(pkt, false);
-  pkt->header = HSA_PACKET_TYPE_INVALID;
-  pkt->type = AIR_PKT_TYPE_INVALID;
-  hsa_signal_subtract_scacq_screl(pkt->completion_signal, 1);
-}
-
-void complete_barrier_packet(void *pkt) {
-  hsa_barrier_and_packet_t *p = (hsa_barrier_and_packet_t *)(pkt);
-  // completion phase
-  p->header = HSA_PACKET_TYPE_INVALID;
-  hsa_signal_subtract_scacq_screl(p->completion_signal, 1);
-}
-
-void handle_packet_device_initialize(hsa_agent_dispatch_packet_t *pkt) {
-  packet_set_active(pkt, true);
-  xaie_device_init();
 }
 
 void handle_packet_segment_initialize(hsa_agent_dispatch_packet_t *pkt) {
-  setup = true;
   packet_set_active(pkt, true);
 
   // Address mode here is absolute range
@@ -1057,27 +782,33 @@ void handle_packet_segment_initialize(hsa_agent_dispatch_packet_t *pkt) {
   }
 }
 
-void handle_packet_get_capabilities(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
+void complete_agent_dispatch_packet(hsa_agent_dispatch_packet_t *pkt) {
+  // completion phase
+  packet_set_active(pkt, false);
+  pkt->header = HSA_PACKET_TYPE_INVALID;
+  pkt->type = AIR_PKT_TYPE_INVALID;
+  hsa_signal_subtract_scacq_screl(pkt->completion_signal, 1);
+}
+
+void complete_barrier_packet(void *pkt) {
+  hsa_barrier_and_packet_t *p = (hsa_barrier_and_packet_t *)(pkt);
+  // completion phase
+  p->header = HSA_PACKET_TYPE_INVALID;
+  hsa_signal_subtract_scacq_screl(p->completion_signal, 1);
+}
+
+void handle_packet_get_capabilities(hsa_agent_dispatch_packet_t *pkt, uint32_t ctrl_id) {
   // packet is in active phase
   packet_set_active(pkt, true);
   uint64_t *addr = (uint64_t *)(pkt->return_address);
 
-  lock_uart(mb_id);
   air_printf("Writing to 0x%llx\n\r", (uint64_t)addr);
-  unlock_uart(mb_id);
   // We now write a capabilities structure to the address we were just passed
   // We've already done this once - should we just cache the results?
-#if defined(ARM_CONTROLLER)
   int user1 = 1;
   int user2 = 0;
 
-#else
-  pvr_t pvr;
-  microblaze_get_pvr(&pvr);
-  int user1 = MICROBLAZE_PVR_USER1(pvr);
-  int user2 = MICROBLAZE_PVR_USER2(pvr);
-#endif
-  addr[0] = (uint64_t)mb_id;        // region id
+  addr[0] = (uint64_t)ctrl_id;      // region id
   addr[1] = (uint64_t)user1;        // num regions
   addr[2] = (uint64_t)(user2 >> 8); // region controller firmware version
   addr[3] = 16L;                    // cores per region
@@ -1087,22 +818,15 @@ void handle_packet_get_capabilities(hsa_agent_dispatch_packet_t *pkt, uint32_t m
   addr[7] = 0L;                     // L2 data memory per region
 }
 
-void handle_packet_get_info(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
+void handle_packet_get_info(hsa_agent_dispatch_packet_t *pkt, uint32_t ctrl_id) {
   // packet is in active phase
   packet_set_active(pkt, true);
   uint64_t attribute = (pkt->arg[0]);
   uint64_t *addr =
       (uint64_t *)(&pkt->return_address); // FIXME when we can use a VA
 
-#if defined(ARM_CONTROLLER)
   int user1 = 1;
   int user2 = 0;
-#else
-  pvr_t pvr;
-  microblaze_get_pvr(&pvr);
-  int user1 = MICROBLAZE_PVR_USER1(pvr);
-  int user2 = MICROBLAZE_PVR_USER2(pvr);
-#endif
   char name[] = "ACDC";
   char vend[] = "AMD";
 
@@ -1115,7 +839,7 @@ void handle_packet_get_info(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
     strcpy((char *)addr, vend);
     break;
   case AIR_AGENT_INFO_CONTROLLER_ID:
-    *addr = (uint64_t)mb_id; // region id
+    *addr = (uint64_t)ctrl_id; // region id
     break;
   case AIR_AGENT_INFO_FIRMWARE_VER:
     *addr = (uint64_t)(user2 >> 8); // region controller firmware version
@@ -1147,15 +871,13 @@ void handle_packet_get_info(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
   }
 }
 
-#ifdef ARM_CONTROLLER
-
-/* Hardcoded . If the platform memory map changes 
+/* Hardcoded . If the platform memory map changes
 these will have to change */
 uint64_t ernic_0_base = 0x0000020100080000UL;
 uint64_t ernic_1_base = 0x00000201000C0000UL;
 
-/* Used for the device controller to poll on an 
-incoming RDMA SEND, and copy the payload to some 
+/* Used for the device controller to poll on an
+incoming RDMA SEND, and copy the payload to some
 buffer in memory */
 void handle_packet_rdma_post_recv(hsa_agent_dispatch_packet_t *pkt) {
 
@@ -1169,7 +891,7 @@ void handle_packet_rdma_post_recv(hsa_agent_dispatch_packet_t *pkt) {
   uint32_t length               = (pkt->arg[1] >> 16) & 0xFFFF;
   uint8_t  ernic_sel            = (pkt->arg[1] >> 48) & 0xFF;
 
-  // Pointing to the proper ERNIC 
+  // Pointing to the proper ERNIC
   volatile uint32_t *ernic_csr = NULL;
   if(ernic_sel == 0) {
     ernic_csr = (volatile uint32_t *)ernic_0_base;
@@ -1227,7 +949,7 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
   uint8_t  qpid                   = (pkt->arg[2] >> 48) & 0xFF;
   uint8_t  ernic_sel              = (pkt->arg[2] >> 56) & 0xFF;
 
-  // Pointing to the proper ERNIC 
+  // Pointing to the proper ERNIC
   volatile uint32_t *ernic_csr = NULL;
   if(ernic_sel == 0) {
     ernic_csr = (volatile uint32_t *)ernic_0_base;
@@ -1287,7 +1009,6 @@ void handle_packet_rdma_post_wqe(hsa_agent_dispatch_packet_t *pkt) {
       cq_ci_db = ernic_csr[ERNIC_QP_ADDR(qpid, CQHEADi)];
   }
 }
-#endif
 
 void handle_packet_read_write_aie_reg32(hsa_agent_dispatch_packet_t *pkt, bool is_write) {
 
@@ -1296,9 +1017,9 @@ void handle_packet_read_write_aie_reg32(hsa_agent_dispatch_packet_t *pkt, bool i
   uint32_t value = pkt->arg[1] & 0xFFFFFFFF;
 
   if (address > AIE_CSR_SIZE) {
-    printf("[ERROR] read32/write32 packets provided address of size 0x%lx. "
-           "Window is only 4GB\n",
-           address);
+    xil_printf("[ERROR] read32/write32 packets provided address of size 0x%lx. "
+               "Window is only 4GB\n",
+                address);
   }
 
   if (is_write) {
@@ -1307,6 +1028,8 @@ void handle_packet_read_write_aie_reg32(hsa_agent_dispatch_packet_t *pkt, bool i
     pkt->arg[2] = in32(AIE_BASE + address);
   }
   packet_set_active(pkt, false);
+  pkt->header = HSA_PACKET_TYPE_INVALID;
+  pkt->type = AIR_PKT_TYPE_INVALID;
   --pkt->completion_signal.handle;
 }
 
@@ -1397,11 +1120,11 @@ void handle_packet_load_airbin(hsa_agent_dispatch_packet_t *pkt) {
     // reset the column
     aie_reset_column(c);
   }
-  
+
   // copy
   uint32_t ret = cdma_sg_start_sync(0, idx);
   if (ret) {
-    printf("Error 0x%x in CDMA\r\n", ret);
+    xil_printf("Error 0x%x in CDMA\r\n", ret);
     return;
   }
   air_printf("DMA done\r\n");
@@ -1436,8 +1159,8 @@ void handle_packet_sg_cdma(hsa_agent_dispatch_packet_t *pkt) {
   uint32_t num_rows = (pkt->arg[3] >> 8) & 0xff;
   uint32_t start_col = (pkt->arg[3] >> 16) & 0xff;
   uint32_t num_cols = (pkt->arg[3] >> 24) & 0xff;
-  for (uint c = start_col; c < start_col + num_cols; c++) {
-    for (uint r = start_row; r < start_row + num_rows; r++) {
+  for (uint32_t c = start_col; c < start_col + num_cols; c++) {
+    for (uint32_t r = start_row; r < start_row + num_rows; r++) {
       out32(getTileAddr(c, r) + 0x00032000, 0x2);
       air_printf("Done resetting col %d row %d.\n\r", c, r);
     }
@@ -1471,68 +1194,14 @@ void handle_packet_sg_cdma(hsa_agent_dispatch_packet_t *pkt) {
   int cnt = 100;
   while (!(cdmab[1] & 2) && cnt--)
     air_printf("SG CDMA wait... %x\n\r", cdmab[1]);
-  for (uint c = start_col; c < start_col + num_cols; c++) {
-    for (uint r = start_row; r <= start_row + num_rows; r++) {
+  for (uint32_t c = start_col; c < start_col + num_cols; c++) {
+    for (uint32_t r = start_row; r <= start_row + num_rows; r++) {
       for (int l = 0; l < 16; l++)
         maskpoll32(getTileAddr(c, r) + REG_AIE_LOCK_RELEASE_0(l), 0x1, 0x1, 0);
       out32(getTileAddr(c, r) + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_ENABLE);
     }
   }
   air_printf("CDMA done!\n\r");
-}
-
-void handle_packet_cdma(hsa_agent_dispatch_packet_t *pkt) {
-  // packet is in active phase
-  packet_set_active(pkt, true);
-  uint32_t start_row = (pkt->arg[3] >> 0) & 0xff;
-  uint32_t num_rows = (pkt->arg[3] >> 8) & 0xff;
-  uint32_t start_col = (pkt->arg[3] >> 16) & 0xff;
-  uint32_t num_cols = (pkt->arg[3] >> 24) & 0xff;
-  uint32_t op = (pkt->arg[3] >> 32) & 0xff;
-  if (op == 2) {
-    for (uint c = start_col; c < start_col + num_cols; c++) {
-      for (uint r = start_row; r < start_row + num_rows; r++) {
-        int st = in32(getTileAddr(c, r) + REG_AIE_CORE_STATUS);
-        air_printf("Status col %d row %d. 0x%x\n\r", c, r, st & 0x3);
-        if ((0x3 & st) != 0x2) {
-          out32(getTileAddr(c, r) + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_RESET);
-          air_printf("Done resetting col %d row %d.\n\r", c, r);
-        }
-      }
-    }
-  }
-  if (op == 1) {
-    for (uint8_t c = start_col; c < start_col + num_cols; c++) {
-      air_printf("Resetting column %u.\n\r", c);
-      aie_reset_column(c);
-      air_printf("Done resetting column %u.\n\r", c);
-    }
-  }
-  volatile uint32_t *cdmab = (volatile uint32_t *)(CDMA_BASE);
-  uint32_t status = cdmab[1];
-  air_printf("CMDA raw %x idle %x\n\r", status, status & 2);
-  uint64_t daddr = (pkt->arg[0]);
-  uint64_t saddr = (pkt->arg[1]);
-  uint32_t bytes = (pkt->arg[2]);
-  air_printf("CMDA dst %lx src %lx\n\r", daddr, saddr);
-  cdmab[0] = 0x0; // unset SG mode
-  cdmab[6] = saddr & 0xffffffff;
-  cdmab[7] = saddr >> 32;
-  cdmab[8] = daddr & 0xffffffff;
-  cdmab[9] = daddr >> 32;
-  cdmab[10] = bytes;
-  while (!(cdmab[1] & 2))
-    air_printf("CMDA wait...\n\r");
-  if (op == 2) {
-    for (uint c = start_col; c < start_col + num_cols; c++) {
-      for (uint r = start_row; r <= start_row + num_rows; r++) {
-        for (int l = 0; l < 16; l++)
-          maskpoll32(getTileAddr(c, r) + REG_AIE_LOCK_RELEASE_0(l), 0x1, 0x1,
-                     0);
-        out32(getTileAddr(c, r) + REG_AIE_CORE_CTL, REG_AIE_CORE_CTL_ENABLE);
-      }
-    }
-  }
 }
 
 void handle_packet_xaie_lock(hsa_agent_dispatch_packet_t *pkt) {
@@ -1566,26 +1235,23 @@ void handle_packet_xaie_lock(hsa_agent_dispatch_packet_t *pkt) {
   }
 }
 
-#ifdef ARM_CONTROLLER
 void handle_packet_xaie_status(hsa_agent_dispatch_packet_t *pkt, uint32_t type) {
   xil_printf("Reading status! %d %d %d\n\r", type, pkt->arg[0], pkt->arg[1]);
-  if (type == 1) {
-    mlir_aie_print_shimdma_status(pkt->arg[0]);
-  } else if (type == 2) {
-    mlir_aie_print_dma_status(pkt->arg[0], pkt->arg[1]);
-  } else if (type == 3) {
-    mlir_aie_print_tile_status(pkt->arg[0], pkt->arg[1]);
-  }
 }
-#endif
 
-void handle_packet_hello(hsa_agent_dispatch_packet_t *pkt, uint32_t mb_id) {
+void handle_packet_hello(hsa_agent_dispatch_packet_t *pkt, uint32_t ctrl_id) {
   packet_set_active(pkt, true);
 
   uint64_t say_what = pkt->arg[0];
-  lock_uart(mb_id);
-  xil_printf("MB %d : HELLO %08X\n\r", mb_id, (uint32_t)say_what);
-  unlock_uart(mb_id);
+  xil_printf("CTRL %d : HELLO %08X\n\r", ctrl_id+1, (uint32_t)say_what);
+}
+
+/*
+ * check if slot is in use
+ * Only one packet can occupy a slot at a time
+ */
+bool slot_filled(uint32_t slot) {
+  return (bool)(staged_nd_slot[slot].valid);
 }
 
 void handle_packet_translate(hsa_agent_dispatch_packet_t *pkt) {
@@ -1600,33 +1266,27 @@ void handle_packet_translate(hsa_agent_dispatch_packet_t *pkt) {
   *addr = (uint64_t)pa;
 }
 
-typedef struct staged_nd_memcpy_s {
-  uint32_t valid;
-  hsa_agent_dispatch_packet_t *pkt;
-  uint64_t paddr[3];
-  uint32_t index[3];
-} staged_nd_memcpy_t; // about 48B therefore @ 64 slots ~3kB
-
-uint32_t get_slot(uint16_t col, uint16_t space) {
-  if (space == 2) {
-    for (uint16_t i = 0; i < NUM_SHIM_DMAS; i++) {
-      if (col == shim_dma_cols[i]) {
-        return i * 4;
-      }
-    }
-  } else if (space == 1) {
-    for (uint16_t i = 0; i < NUM_COL_DMAS; i++) {
-      if (col == col_dma_cols[i]) {
-        return i * 4 + NUM_SHIM_DMAS * 4;
-      }
-    }
-  }
-  return 0;
+/*
+ * get the packet attached to a slot
+ */
+hsa_agent_dispatch_packet_t* get_slot_packet(uint32_t slot) {
+  return staged_nd_slot[slot].pkt;
 }
 
-// GLOBAL storage for 'in progress' ND memcpy work
-// NOTE 4 slots per shim DMA
-staged_nd_memcpy_t staged_nd_slot[NUM_DMAS * 4];
+/*
+ * lookup slot index based on column, direction, and channel
+ */
+uint32_t get_slot(uint32_t col, uint32_t space, uint32_t direction, uint32_t channel) {
+  if (space == 2) {
+    for (uint32_t i = 0; i < NUM_SHIM_DMAS; i++) {
+      if (col == shim_dma_cols[i]) {
+        return (i * 4) + SHIM_DMA_CHNUM(direction, channel);
+      }
+    }
+    return (uint32_t)(-1);
+  }
+  return (uint32_t)(-1);
+}
 
 void nd_dma_put_checkpoint(hsa_agent_dispatch_packet_t **pkt, uint32_t slot,
                            uint32_t idx_4d, uint32_t idx_3d, uint32_t idx_2d,
@@ -1653,7 +1313,16 @@ void nd_dma_get_checkpoint(hsa_agent_dispatch_packet_t **pkt, uint32_t slot,
   idx_4d = staged_nd_slot[slot].index[2];
 }
 
-int do_packet_nd_memcpy(uint32_t slot) {
+/*
+ * do the nd_memcpy packet
+ * this may require multiple BDs to complete
+ * returns true when all BDs have been completed
+ * returns false otherwise, including if the packet needs to be processed
+ *  further to send additional BDs
+ */
+bool do_packet_nd_memcpy(uint32_t slot, uint32_t ctrl_id) {
+
+  // lookup the staged packet / nd_memcpy
   hsa_agent_dispatch_packet_t *a_pkt;
   uint64_t paddr_3d;
   uint64_t paddr_2d;
@@ -1686,17 +1355,18 @@ int do_packet_nd_memcpy(uint32_t slot) {
   for (; index_4d < length_4d; index_4d++) {
     for (; index_3d < length_3d; index_3d++) {
       for (; index_2d < length_2d; index_2d++) {
-        outstanding = xaie_shim_dma_get_outstanding(getTileAddr(col, 0),
-                                                    direction, channel);
-        air_printf("\n\rND start shim DMA %u %u [%u][%u][%u] paddr=0x%llx\r\n",
-                   direction, channel, index_4d, index_3d, index_2d, paddr_1d);
-        if (outstanding >= 4) { // NOTE What is proper 'stalled' threshold?
+        bool can_push_bd = shim_dma_can_push_bd(getTileAddr(col, 0), direction, channel);
+        if (can_push_bd) {
+          air_printf("\n\rND start shim DMA %u %u [%u][%u][%u] paddr=0x%llx\r\n",
+                     direction, channel, index_4d, index_3d, index_2d, paddr_1d);
+          shim_dma_push_bd(getTileAddr(col, 0), slot, direction, channel, col,
+                           paddr_1d, length_1d, ctrl_id);
+        } else {
           nd_dma_put_checkpoint(&a_pkt, slot, index_4d, index_3d, index_2d,
                                 paddr_3d, paddr_2d, paddr_1d);
-          return 1;
-        } else {
-          xaie_shim_dma_push_bd(getTileAddr(col, 0), direction, channel, col,
-                                paddr_1d, length_1d);
+          air_printf("\n\rND CHECKPOINT shim DMA %u %u [%u][%u][%u] paddr=0x%llx\r\n",
+                     direction, channel, index_4d, index_3d, index_2d, paddr_1d);
+          return false;
         }
         paddr_1d += stride_2d;
       }
@@ -1712,94 +1382,188 @@ int do_packet_nd_memcpy(uint32_t slot) {
     paddr_2d = paddr_3d;
   }
 
-  // Wait check idle
-  int wait_idle_ret =
-      xaie_shim_dma_wait_idle(getTileAddr(col, 0), direction, channel);
+  // only reaches here if all BDs have been pushed
+  return true;
 
-  // If return 1 we timed out, BDs waiting on other BDs. Put checkpoint and
-  // return 1
-  if (wait_idle_ret) {
-    nd_dma_put_checkpoint(&a_pkt, slot, index_4d, index_3d, index_2d, paddr_3d,
-                          paddr_2d, paddr_1d);
+}
+
+bool wait_packet_nd_memcpy(uint32_t slot, uint32_t ctrl_id) {
+  // lookup the staged packet / nd_memcpy
+  hsa_agent_dispatch_packet_t *a_pkt;
+  uint64_t paddr_3d;
+  uint64_t paddr_2d;
+  uint64_t paddr_1d;
+  uint32_t index_4d;
+  uint32_t index_3d;
+  uint32_t index_2d;
+  nd_dma_get_checkpoint(&a_pkt, slot, index_4d, index_3d, index_2d, paddr_3d,
+                        paddr_2d, paddr_1d);
+
+  uint16_t channel = (a_pkt->arg[0] >> 24) & 0x00ff;
+  uint16_t col = (a_pkt->arg[0] >> 32) & 0x00ff;
+  uint16_t direction = (a_pkt->arg[0] >> 60) & 0x000f;
+
+  // all BDs pushed
+  // do a check for idle, but don't block
+  bool wait_idle_ret =
+      shim_dma_wait_idle(getTileAddr(col, 0), direction, channel, ctrl_id);
+
+  // timeout is okay, leave packet staged and BD in progress, then check later
+  // false return indicates timeout
+  if (!wait_idle_ret) {
+    air_printf("WARN: wait_packet_nd_memcpy() timed out on shim_dma_wait()\n\r");
   }
 
   return wait_idle_ret;
 }
 
-int do_packet_memcpy(uint32_t slot) {
-  if (slot >= NUM_SHIM_DMAS * 4) {
-    return 0;
-  } else {
-    return do_packet_nd_memcpy(slot);
-  }
-}
-
-void program_soft_pl(uint64_t paddr, uint32_t length, uint32_t direction) {
-
-
-    uint32_t offset = direction == SHIM_DMA_S2MM ? XAXIDMA_RX_OFFSET : 0;
-    volatile uint32_t *soft_dma_base_addr = (uint32_t *) (SOFT_DMA_CTRL_BASE_ADDR + offset);
-    volatile uint32_t soft_dma_control_vals = soft_dma_base_addr[(XAXIDMA_CR_OFFSET) / 4];
-
-    // We are just using a single descriptor so need to reset the channel after using
-    // This is maybe a bit overkill but we are not using it for anything fancy so it should suffice
-    soft_dma_base_addr[(XAXIDMA_CR_OFFSET) / 4] = soft_dma_control_vals | XAXIDMA_CR_RESET_MASK;
-    soft_dma_base_addr[(XAXIDMA_CR_OFFSET) / 4] = soft_dma_control_vals;
-
-    // Checking to make sure it is not busy
-    if(soft_dma_base_addr[(XAXIDMA_SR_OFFSET) / 4] | XAXIDMA_HALTED_MASK) {
-
-      if(soft_dma_base_addr[(XAXIDMA_SR_OFFSET) / 4] & XAXIDMA_IDLE_MASK) {
-        air_printf("[ERROR] Soft dma is busy\r\n");
-        return;
-      }
-    }
-
-    // Setting the address
-    soft_dma_base_addr[(XAXIDMA_SRCADDR_OFFSET) / 4] = (uint32_t)(paddr & 0xFFFFFFFF);
-    soft_dma_base_addr[(XAXIDMA_SRCADDR_MSB_OFFSET) / 4] = (uint32_t)((paddr >> 32) & 0xFFFFFFFF);
-
-    // Setting the run
-    soft_dma_base_addr[(XAXIDMA_CR_OFFSET) / 4] = soft_dma_control_vals | XAXIDMA_CR_RUNSTOP_MASK;
-
-    // Writing to the BTT register which starts the transfer
-    soft_dma_base_addr[(XAXIDMA_BUFFLEN_OFFSET) / 4] = length;
-
-    return;
-
-}
-
-int stage_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint32_t slot,
-                           uint32_t memory_space) {
-  air_printf("stage_packet_nd_memcpy %d\n\r", slot);
-  if (staged_nd_slot[slot].valid) {
-    air_printf("STALL: ND Memcpy Slot %d Busy!\n\r", slot);
-    return 2;
-  }
+/*
+ * stage a nd_memcpy packet for processing
+ * this makes the packet active and copies it into the provided slot
+ */
+void stage_packet_nd_memcpy(hsa_agent_dispatch_packet_t *pkt, uint32_t slot,
+                            uint32_t ctrl_id) {
+  air_printf("stage_packet_nd_memcpy slot %d\n\r", slot);
+  // make active
   packet_set_active(pkt, true);
 
   uint64_t paddr = translate_virt_to_phys(pkt->arg[1]);
-  air_printf("ND_MEMCPY: Got physical address 0x%lx\r\n", paddr);
+  air_printf("ND_MEMCPY: physical address 0x%lx\r\n", paddr);
 
-  if (memory_space == 2) {
-    nd_dma_put_checkpoint(&pkt, slot, 0, 0, 0, paddr, paddr, paddr);
-    staged_nd_slot[slot].valid = 1;
-    return 0;
-  }
-  else if(memory_space == 1) {
-    uint32_t length_1d = (pkt->arg[2] >> 0) & 0xffffffff;
-    uint16_t direction = (pkt->arg[0] >> 60) & 0x000f;
-    program_soft_pl(paddr, length_1d, direction);
-    return 1;
-  } 
-  else {
-    air_printf("NOT SUPPORTED: Cannot program memory space %d DMAs\n\r",
-               memory_space);
-    return 1;
-  }
+  // copy to slot
+  nd_dma_put_checkpoint(&pkt, slot, 0, 0, 0, paddr, paddr, paddr);
+  staged_nd_slot[slot].valid = 1;
 }
 
-void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
+/*
+ * unstage a packet
+ * this does not inactivate the packet
+ */
+void unstage_packet_nd_memcpy(uint32_t slot, uint32_t ctrl_id) {
+  staged_nd_slot[slot].valid = 0;
+  staged_nd_slot[slot].pkt = nullptr;
+  air_printf("unstage_packet_nd_memcpy slot %d\n\r", slot);
+}
+
+/*
+ * Attempt to complete the given packet, which is assumed to be at rd_id of the queue.
+ * If the packet is not successfully completed (ran out of BDs, timeout on shimDMA wait),
+ * additional packets may be staged and BDs pushed, but completion will not be attempted.
+ * Staging terminates when any packet other than an ND_MEMCPY is encountered.
+ *
+ * At entry, all packets before the current one are complete, but the current
+ * packet may already be staged.
+ */
+int handle_packet_nd_memcpy(amd_queue_t *amd_queue, hsa_agent_dispatch_packet_t *pkt,
+                            uint64_t local_read_index, uint32_t ctrl_id, int queue_id) {
+  int packets_processed = 0;
+
+  // check memory space
+  uint16_t memory_space = (pkt->arg[0] >> 16) & 0x00ff;
+  if (memory_space != 2) {
+    air_printf("WARN: BAD nd_memcpy packet for memspace %u\n\r", memory_space);
+    complete_agent_dispatch_packet(pkt);
+    packets_processed++;
+    return packets_processed;
+  }
+
+  // check slot
+  uint16_t channel = (pkt->arg[0] >> 24) & 0x00ff;
+  uint16_t direction = (pkt->arg[0] >> 60) & 0x000f;
+  uint16_t col = (pkt->arg[0] >> 32) & 0x00ff;
+  uint32_t slot = get_slot(col, memory_space, direction, channel);
+  if (slot == (uint32_t)(-1)) {
+    air_printf("WARN: BAD nd_memcpy packet slot for col %u\n\r", col);
+    complete_agent_dispatch_packet(pkt);
+    packets_processed++;
+    return packets_processed;
+  }
+
+  // check if slot has a staged packet (if so, it should be this packet)
+  // if no packet staged, stage this one (also makes it active)
+  if (!slot_filled(slot)) {
+    stage_packet_nd_memcpy(pkt, slot, ctrl_id);
+  }
+
+  // attempt to push all of the BDs for the staged packet
+  bool bds_pushed = do_packet_nd_memcpy(slot, ctrl_id);
+
+  // if all BDs pushed, attempt to complete the packet
+  if (bds_pushed) {
+    bool shim_dma_idle = wait_packet_nd_memcpy(slot, ctrl_id);
+    if (shim_dma_idle) {
+      complete_agent_dispatch_packet(pkt);
+      // clear the staged slot
+      unstage_packet_nd_memcpy(slot, ctrl_id);
+      // count the packet as fully processed
+      packets_processed++;
+      return packets_processed;
+    }
+    // else shim DMA still working, attempt to start additional packets
+  }
+  // else could not push all BDs yet, attempt to start additional packets
+
+  // packet staging loop
+  // reached only if initial packet did not fully complete
+  // this loop does not complete packets, it only stages and pushes as many BDs as possible
+  // from the next packets in the queue, stoping as soon as a packet other than ND_MEMCPY
+  // is reached or if the needed slot is already occupied
+  bool staging_done = false;
+  while (!staging_done) {
+    // move to next packet
+    local_read_index++;
+    // get the next packet
+    hsa_agent_dispatch_packet_t *pkt_buf(
+        reinterpret_cast<hsa_agent_dispatch_packet_t*>(hsa_csr->queue_bufs[queue_id]));
+    pkt = &pkt_buf[local_read_index % amd_queue->hsa_queue.size];
+
+    // verify current packet is an agent dispatch packet and op is ND_MEMCPY
+    auto type = pkt->header & 0xffU;
+    // get the dispatch operation
+    auto op = pkt->type & 0xffff;
+    if (type != HSA_PACKET_TYPE_AGENT_DISPATCH || op != AIR_PKT_TYPE_ND_MEMCPY) {
+      staging_done = true;
+      break;
+    }
+
+    // check memory space
+    uint16_t memory_space = (pkt->arg[0] >> 16) & 0x00ff;
+    if (memory_space != 2) {
+      air_printf("WARN: BAD nd_memcpy packet for memspace %u\n\r", memory_space);
+      staging_done = true;
+      break;
+    }
+
+    // lookup slot
+    uint16_t channel = (pkt->arg[0] >> 24) & 0x00ff;
+    uint16_t direction = (pkt->arg[0] >> 60) & 0x000f;
+    uint16_t col = (pkt->arg[0] >> 32) & 0x00ff;
+    uint32_t slot = get_slot(col, memory_space, direction, channel);
+    if (slot == (uint32_t)(-1)) {
+      air_printf("WARN: BAD nd_memcpy packet slot for col %u\n\r", col);
+      staging_done = true;
+      break;
+    }
+
+    // check if slot has a staged packet, only proceed if no packet staged
+    staging_done = slot_filled(slot);
+    // if no packet staged, stage this one
+    if (!staging_done) {
+      // stage packet, mark active
+      stage_packet_nd_memcpy(pkt, slot, ctrl_id);
+      // push BDs, but don't check for completion
+      do_packet_nd_memcpy(slot, ctrl_id);
+    }
+  }
+
+  return packets_processed;
+}
+
+/*
+ * process agent dispatch packet
+ */
+void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t ctrl_id, int queue_id) {
+  // get the packet
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   uint64_t local_read_index = amd_queue->read_dispatch_id;
   hsa_agent_dispatch_packet_t *pkt_buf(
@@ -1807,196 +1571,139 @@ void handle_agent_dispatch_packet(amd_queue_t *amd_queue, uint32_t mb_id, int qu
   hsa_agent_dispatch_packet_t *pkt(
       &pkt_buf[local_read_index % amd_queue->hsa_queue.size]);
 
-  int last_slot = 0;
-  int max_slot = 4 * NUM_DMAS - 1;
-
-  int num_active_packets = 1;
+  bool done = false;
   int packets_processed = 0;
-
   do {
-    // Looped back because ND memcpy failed to finish on the first try.
-    // No other packet type will not finish on first try.
-    if (num_active_packets > 1) {
-      // NOTE assume we are coming from a stall, that's why we RR.
-
-      // INFO:
-      // 1)  check for valid staged packets that aren't the previous
-      // 2a)  FOUND process packet here
-      // 2b) !FOUND get next packet && check invalid
-      // 3b) goto packet_op
-      int slot = last_slot;
-      bool stalled = true;
-      bool active = false;
-      do {
-        slot = (slot == max_slot) ? 0 : slot + 1; // TODO better heuristic
-        if (slot == last_slot)
-          break;
-        air_printf("RR check slot: %d\n\r", slot);
-        if (staged_nd_slot[slot].valid) {
-          hsa_agent_dispatch_packet_t *a_pkt = staged_nd_slot[slot].pkt;
-          uint16_t channel = (a_pkt->arg[0] >> 24) & 0x00ff;
-          uint16_t col = (a_pkt->arg[0] >> 32) & 0x00ff;
-          // uint16_t logical_col  = (a_pkt->arg[0] >> 32) & 0x00ff;
-          uint16_t direction = (a_pkt->arg[0] >> 60) & 0x000f;
-          // uint16_t col          = mappedShimDMA[logical_col];
-          stalled = (xaie_shim_dma_get_outstanding(getTileAddr(col, 0),
-                                                   direction, channel) >= 4);
-          active = packet_get_active(a_pkt);
-        } else {
-          stalled = true;
-          active = false;
-        }
-        air_printf("RR slot: %d - valid %d stalled %d active %d\n\r", slot,
-                   staged_nd_slot[slot].valid, stalled, active);
-      } while (!staged_nd_slot[slot].valid || stalled || !active);
-
-      if (slot == last_slot) { // Begin get next packet
-        local_read_index++;
-        pkt = &pkt_buf[local_read_index % amd_queue->hsa_queue.size];
-        air_printf("HELLO NEW PACKET IN FLIGHT!\n\r");
-        if (((pkt->header) & 0xff) != HSA_PACKET_TYPE_AGENT_DISPATCH) {
-          local_read_index--;
-          pkt = &pkt_buf[local_read_index % amd_queue->hsa_queue.size];
-          air_printf("WARN: Found invalid HSA packet inside peek loop!\n\r");
-          // TRICKY weird state where we didn't find a new packet but RR won't
-          // let us retry. So advance last_slot.
-          last_slot =
-              (slot == max_slot) ? 0 : slot + 1; // TODO better heuristic
-          continue;
-        } else
-          goto packet_op;
-      } // End get next packet
-
-      // FOUND ND packet process here
-      last_slot = slot;
-      int ret = do_packet_memcpy(slot);
-      if (ret)
-        continue;
-      else {
-        num_active_packets--;
-        staged_nd_slot[slot].valid = 0;
-        complete_agent_dispatch_packet(staged_nd_slot[slot].pkt);
-        packets_processed++;
-        continue;
-      }
+    // verify current packet is an agent dispatch packet
+    auto type = pkt->header & 0xffU;
+    if (type != HSA_PACKET_TYPE_AGENT_DISPATCH) {
+      done = true;
+      break;
     }
 
-  packet_op:
+    // get the dispatch operation
     auto op = pkt->type & 0xffff;
     // air_printf("Op is %04X\n\r",op);
+
     switch (op) {
     case AIR_PKT_TYPE_INVALID:
     default:
-      air_printf("WARN: invalid air pkt type\n\r");
+      air_printf("Invalid or Unknown op: %u\n\r", op);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
-
+    case AIR_PKT_TYPE_HELLO:
+      air_printf("Processing Hello\n\r");
+      handle_packet_hello(pkt, ctrl_id);
+      complete_agent_dispatch_packet(pkt);
+      packets_processed++;
+      break;
+    case AIR_PKT_TYPE_GET_CAPABILITIES:
+      air_printf("Processing Get Capabilities\n\r");
+      handle_packet_get_capabilities(pkt, ctrl_id);
+      complete_agent_dispatch_packet(pkt);
+      packets_processed++;
+      break;
+    case AIR_PKT_TYPE_GET_INFO:
+      air_printf("Processing Get Info\n\r");
+      handle_packet_get_info(pkt, ctrl_id);
+      complete_agent_dispatch_packet(pkt);
+      packets_processed++;
+      break;
     case AIR_PKT_TYPE_DEVICE_INITIALIZE:
+      air_printf("Processing Device Initialize\n\r");
       handle_packet_device_initialize(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
     case AIR_PKT_TYPE_SEGMENT_INITIALIZE:
+      air_printf("Processing Segment Initialize\n\r");
       handle_packet_segment_initialize(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
-
     case AIR_PKT_TYPE_CONFIGURE:
+      air_printf("Processing Configure (SG_CDMA)\n\r");
       handle_packet_sg_cdma(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
-
-#ifdef ARM_CONTROLLER
     case AIR_PKT_TYPE_POST_RDMA_WQE:
+      air_printf("Processing Post RDMA WQE\n\r");
       handle_packet_rdma_post_wqe(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
-    case AIR_PKT_TYPE_READ_AIE_REG32:
-      handle_packet_read_write_aie_reg32(pkt, false);
-      packets_processed++;
-      break;
-    case AIR_PKT_TYPE_WRITE_AIE_REG32:
-      handle_packet_read_write_aie_reg32(pkt, true);
-      packets_processed++;
       break;
     case AIR_PKT_TYPE_POST_RDMA_RECV:
+      air_printf("Processing Post RDMA RECV\n\r");
       handle_packet_rdma_post_recv(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
-#endif
-
+    case AIR_PKT_TYPE_READ_AIE_REG32:
+      air_printf("Processing Read AIE Reg32\n\r");
+      handle_packet_read_write_aie_reg32(pkt, false);
+      packets_processed++;
+      break;
+    case AIR_PKT_TYPE_WRITE_AIE_REG32:
+      air_printf("Processing Write AIE Reg32\n\r");
+      handle_packet_read_write_aie_reg32(pkt, true);
+      packets_processed++;
+      break;
     case AIR_PKT_TYPE_AIRBIN:
+      air_printf("Processing Load airbin\n\r");
       // hard-coded column number for now
       handle_packet_load_airbin(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
-
-    case AIR_PKT_TYPE_HELLO:
-      handle_packet_hello(pkt, mb_id);
-      complete_agent_dispatch_packet(pkt);
-      packets_processed++;
-      break;
-    case AIR_PKT_TYPE_GET_CAPABILITIES:
-      handle_packet_get_capabilities(pkt, mb_id);
-      complete_agent_dispatch_packet(pkt);
-      packets_processed++;
-      break;
-    case AIR_PKT_TYPE_GET_INFO:
-      handle_packet_get_info(pkt, mb_id);
-      complete_agent_dispatch_packet(pkt);
-      packets_processed++;
-      break;
     case AIR_PKT_TYPE_XAIE_LOCK:
+      air_printf("Processing XAIE Lock\n\r");
       handle_packet_xaie_lock(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
-
+    case AIR_PKT_TYPE_PROG_FIRMWARE:
+      air_printf("Processing Program BP Firmware\n\r");
+      handle_packet_prog_firmware(pkt, bp_core_mgrs);
+      start_bps(bp_core_mgrs);
+      complete_agent_dispatch_packet(pkt);
+      packets_processed++;
+      break;
     case AIR_PKT_TYPE_TRANSLATE:
       handle_packet_translate(pkt);
       complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
-
-    case AIR_PKT_TYPE_ND_MEMCPY: // Only arrive here the first try.
-      uint16_t memory_space = (pkt->arg[0] >> 16) & 0x00ff;
-      uint16_t channel = (pkt->arg[0] >> 24) & 0x00ff;
-      uint16_t direction = (pkt->arg[0] >> 60) & 0x000f;
-      uint16_t col = (pkt->arg[0] >> 32) & 0x00ff;
-      uint32_t slot = channel + get_slot(col, memory_space);
-      if (direction == SHIM_DMA_S2MM)
-        slot += XAIEDMA_SHIM_CHNUM_S2MM0;
-      else
-        slot += XAIEDMA_SHIM_CHNUM_MM2S0;
-      int ret = stage_packet_nd_memcpy(pkt, slot, memory_space);
-      if (ret == 0) {
-        last_slot = slot;
-        if (do_packet_memcpy(slot)) {
-          num_active_packets++;
-          break;
-        } // else completed the packet in the first try
-      } else if (ret == 2)
-        break; // slot busy, retry.
-      staged_nd_slot[slot].valid = 0;
-      complete_agent_dispatch_packet(
-          pkt); // this is correct for the first try or invalid stage
+    case AIR_PKT_TYPE_BP_CONTROL:
+      air_printf("Processing BP Control\n\r");
+      handle_packet_bp_control(pkt, bp_core_mgrs);
+      complete_agent_dispatch_packet(pkt);
       packets_processed++;
       break;
-
+    case AIR_PKT_TYPE_ND_MEMCPY:
+      air_printf("Processing ND MEMCPY\n\r");
+      int nd_memcpy_processed = handle_packet_nd_memcpy(amd_queue, pkt, local_read_index,
+                                                        ctrl_id, queue_id);
+      if (nd_memcpy_processed) {
+        packets_processed += nd_memcpy_processed;
+      } else {
+        done = true;
+      }
+      break; // case AIR_PKT_TYPE_ND_MEMCPY
     } // switch
-  } while (num_active_packets > 1);
-  lock_uart(mb_id);
+
+    // advance local read pointer, get next packet
+    local_read_index++;
+    pkt = &pkt_buf[local_read_index % amd_queue->hsa_queue.size];
+
+  } while (!done); // packet processing loop
+
   air_printf("Completing: %d packets processed.\n\r", packets_processed);
-  unlock_uart(mb_id);
   *rd_id += packets_processed;
 }
 
-void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
+void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t ctrl_id, int queue_id) {
 
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   uint64_t local_read_index = amd_queue->read_dispatch_id;
@@ -2012,24 +1719,16 @@ void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue
   hsa_signal_t s3 = pkt->dep_signal[3];
   hsa_signal_t s4 = pkt->dep_signal[4];
 
-  // lock_uart(mb_id);
-  // for (int i = 0; i < 5; i++)
-  //  air_printf("MB %d : dep_signal[%d] @ %p\n\r",mb_id,i,(uint64_t
-  //  *)(pkt->dep_signal[i]));
-  // unlock_uart(mb_id);
-
   while ( hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
           hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
           hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
           hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 ||
           hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0) {
-    lock_uart(mb_id);
-    air_printf("MB %d : barrier AND packet completion signal timeout!\n\r",
-               mb_id);
+    air_printf("CTRL %d : barrier AND packet completion signal timeout!\n\r",
+               ctrl_id);
     for (int i = 0; i < 5; i++)
-      air_printf("MB %d : dep_signal[%d] = %d\n\r", mb_id, i,
+      air_printf("CTRL %d : dep_signal[%d] = %d\n\r", ctrl_id, i,
                  pkt->dep_signal[i]);
-    unlock_uart(mb_id);
   }
 
   complete_barrier_packet(pkt);
@@ -2037,7 +1736,7 @@ void handle_barrier_and_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue
 
 }
 
-void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_id) {
+void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t ctrl_id, int queue_id) {
 
   volatile uint64_t *rd_id(&amd_queue->read_dispatch_id);
   uint64_t local_read_index = amd_queue->read_dispatch_id;
@@ -2053,25 +1752,17 @@ void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_
   hsa_signal_t s3 = pkt->dep_signal[3];
   hsa_signal_t s4 = pkt->dep_signal[4];
 
-  // lock_uart(mb_id);
-  // for (int i = 0; i < 5; i++)
-  //  air_printf("MB %d : dep_signal[%d] @ %p\n\r",mb_id,i,(uint64_t
-  //  *)(pkt->dep_signal[i]));
-  // unlock_uart(mb_id);
-
   while ( hsa_signal_wait_scacquire(s0, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
           hsa_signal_wait_scacquire(s1, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
           hsa_signal_wait_scacquire(s2, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
           hsa_signal_wait_scacquire(s3, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0 &&
           hsa_signal_wait_scacquire(s4, HSA_SIGNAL_CONDITION_EQ, 0, 0x80000, HSA_WAIT_STATE_ACTIVE) != 0) {
- 
-    lock_uart(mb_id);
-    air_printf("MB %d : barrier OR packet completion signal timeout!\n\r",
-               mb_id);
+
+    air_printf("CTRL %d : barrier OR packet completion signal timeout!\n\r",
+               ctrl_id);
     for (int i = 0; i < 5; i++)
-      air_printf("MB %d : dep_signal[%d] = %d\n\r", mb_id, i,
+      air_printf("CTRL %d : dep_signal[%d] = %d\n\r", ctrl_id, i,
                  pkt->dep_signal[i]);
-    unlock_uart(mb_id);
   }
 
   complete_barrier_packet(pkt);
@@ -2080,59 +1771,49 @@ void handle_barrier_or_packet(amd_queue_t *amd_queue, uint32_t mb_id, int queue_
 
 int main() {
 
+  int ctrl_id = -1;
+  int maj = 0, min = 0, ver = 0;
+
   // Initializing our platform
   init_platform();
 
   hsa_csr_init();
   hsa_csr_print();
 
-#if defined(ARM_CONTROLLER)
   Xil_DCacheDisable();
 
   aie_libxaie_ctx_t ctx;
   _xaie = &ctx;
   mlir_aie_init_libxaie(_xaie);
   int err = mlir_aie_init_device(_xaie);
-  if (err)
+  if (err) {
     xil_printf("ERROR initializing device.\n\r");
+  }
 
-  // Setting the number of agents in the system
-  int user1 = 1; // number of controllers
-  int user2 = 0;
+  // ARM is ID 1 (admin queue is queue 0, user queue is queue 1)
+  ctrl_id = 1;
 
-  int mb_id = user2 & 0xff;
-  int maj = (user2 >> 24) & 0xff;
-  int min = (user2 >> 16) & 0xff;
-  int ver = (user2 >> 8) & 0xff;
-#else
-  pvr_t pvr;
-  microblaze_get_pvr(&pvr);
-  uint32_t user2 = MICROBLAZE_PVR_USER2(pvr);
-  uint32_t mb_id = user2 & 0xff;
-  uint32_t maj = (user2 >> 24) & 0xff;
-  uint32_t min = (user2 >> 16) & 0xff;
-  uint32_t ver = (user2 >> 8) & 0xff;
-#endif
+  mutex_reset();
+  uart_clear_fifos();
+  uart_check_fifos();
 
-  lock_uart(mb_id);
-#if defined(ARM_CONTROLLER)
+  int num_bp = hsa_csr->num_aql_queues - 2;
+  bp_core_mgrs.resize(num_bp);
+  for (int i = 0; i < num_bp; i++) {
+    bp_core_mgrs.at(i) = new BPCoreMgr(i+1, i);
+  }
+  configure_bps(bp_core_mgrs);
+  xil_printf("ARM %d configured %d RISCV\n\r", ctrl_id, num_bp);
+
+  // one admin queue, one queue per CP
+  int num_ctrl = hsa_csr->num_aql_queues - 1;
+
   xil_printf("ARM %d of %d firmware %d.%d.%d created on %s at %s GMT\n\r",
-             mb_id + 1, hsa_csr->num_aql_queues, maj, min, ver, __DATE__,
+             ctrl_id, num_ctrl, maj, min, ver, __DATE__,
              __TIME__);
-#else
-  xil_printf("MB %d of %d firmware %d.%d.%d created on %s at %s GMT\n\r",
-             mb_id + 1, hsa_csr->num_aql_queues, maj, min, ver, __DATE__,
-             __TIME__);
-#endif
-  xil_printf("(c) Copyright 2020-2022 AMD, Inc. All rights reserved.\n\r");
-  unlock_uart(mb_id);
+  xil_printf("(c) Copyright 2020-2023 AMD, Inc. All rights reserved.\n\r");
 
-  setup = false;
-  lock_uart(mb_id);
-  unlock_uart(mb_id);
-
-  bool done(false);
-
+  // ARM controller uses queue 0 as the admin queue to talk with driver
   int admin_queue_id(0);
   amd_queue_t *admin_queue(hsa_csr->amd_aql_queues[admin_queue_id]);
   admin_queue->hsa_queue.size = 64;
@@ -2144,9 +1825,13 @@ int main() {
       reinterpret_cast<hsa_agent_dispatch_packet_t*>(
           hsa_csr->queue_bufs[admin_queue_id]));
   hsa_agent_dispatch_packet_t *admin_pkt(nullptr);
-  uint64_t admin_last_doorbell(std::numeric_limits<uint64_t>::max());
 
-  int hqd_id(1);
+  *admin_doorbell = std::numeric_limits<uint64_t>::max();
+  *admin_rd_id = 0;
+  *admin_wr_id = 0;
+
+  int hqd_id(ctrl_id);
+  // every core gets one user queue allocated by the runtime
   amd_queue_t *amd_queue(hsa_csr->amd_aql_queues[hqd_id]);
   volatile uint64_t *doorbell(reinterpret_cast<uint64_t*>(
       hsa_csr->doorbells[hqd_id]));
@@ -2156,44 +1841,52 @@ int main() {
       reinterpret_cast<hsa_agent_dispatch_packet_t*>(
           hsa_csr->queue_bufs[hqd_id]));
   hsa_agent_dispatch_packet_t *aql_pkt(nullptr);
-  uint64_t last_doorbell(std::numeric_limits<uint64_t>::max());
 
   *doorbell = std::numeric_limits<uint64_t>::max();
   *rd_id = 0;
   *wr_id = 0;
+  xil_printf("CTRL %d initialized queue at 0x%p\n\r", ctrl_id, amd_queue);
 
-  *admin_doorbell = std::numeric_limits<uint64_t>::max();
-  *admin_rd_id = 0;
-  *admin_wr_id = 0;
+  hsa_csr->global_barrier = 1;
+  xil_printf("ARM %d stored %d to global_barrier\n\r", ctrl_id, hsa_csr->global_barrier);
+  //start_bps(bp_core_mgrs);
 
-  air_printf("Starting packet processing loop\n\r");
-  while (!done) {
+  uint64_t heartbeat = 1;
+  uint64_t heartbeat_threshold = 10000000;
+
+  while (true) {
+    if (heartbeat % heartbeat_threshold == 0) {
+      xil_printf("ARM %d of %d alive at cycle %llu\n\r", ctrl_id, num_ctrl, heartbeat);
+      xil_printf("ARM %d queue at 0x%p, doorbell at 0x%p\n\r", ctrl_id, amd_queue, doorbell);
+    }
+    heartbeat++;
+
     if (*admin_doorbell + 1 > *admin_rd_id) {
-      ++admin_last_doorbell;
       admin_pkt = &admin_queue_buf[*admin_rd_id % 64];
       uint32_t type(static_cast<uint32_t>(admin_pkt->header) & 0xffU);
+      air_printf("[Admin] Doorbell rung %llu\n\r", *admin_doorbell);
 
       switch (type) {
         case HSA_PACKET_TYPE_AGENT_DISPATCH:
-          handle_agent_dispatch_packet(admin_queue, mb_id, admin_queue_id);
+          air_printf("[Admin] Handle agent dispatch packet\n\r");
+          handle_agent_dispatch_packet(admin_queue, ctrl_id, admin_queue_id);
           break;
         default:
-          air_printf("Unsupported admin queue packet type: %u\n\r", type);
+          air_printf("[Admin] Unsupported packet type: %u\n\r", type);
           ++(*admin_rd_id);
           break;
-      }
-    }
+      } // switch (type)
+    } // admin doorbell rung
 
     if (*doorbell + 1 > *rd_id) {
-      ++last_doorbell;
       aql_pkt = &queue_buf[*rd_id % amd_queue->hsa_queue.size];
       uint32_t type(static_cast<uint32_t>(aql_pkt->header) & 0xffU);
       uint32_t func(static_cast<uint32_t>(aql_pkt->type) & 0xffffU);
 
-      air_printf("Doorbell rung %llu\n\r", *doorbell);
-      air_printf("Packet type %u, func type %u, pkt data %llx\n\r", type, func,
+      air_printf("[User] Doorbell rung %llu\n\r", *doorbell);
+      air_printf("[User] Packet type %u, func type %u, pkt data %llx\n\r", type, func,
                  aql_pkt->arg[0]);
-      air_printf("queue heap addr %llx\n\r", hsa_csr->queue_dram_cpu_va[hqd_id]);
+      air_printf("[User] Queue heap addr %llx\n\r", hsa_csr->queue_dram_cpu_va[hqd_id]);
 
       uint32_t invalid_count = 0;
       while (type == HSA_PACKET_TYPE_INVALID) {
@@ -2205,7 +1898,7 @@ int main() {
           // TODO: Come back to this for the multi-prodcer queue as we can hit this
           invalid_count++;
           if(invalid_count > INVLD_COUNT_TIMEOUT) {
-            xil_printf("[WARNING] We are stuck in an invalid packet and timed out. Breaking\r\n");
+            xil_printf("[User][WARNING] We are stuck in an invalid packet and timed out. Breaking\r\n");
             xil_printf("\theader: 0x%x\r\n", aql_pkt->header);
             xil_printf("\ttype: 0x%x\r\n", type);
             xil_printf("\tfunc: 0x%x\r\n", func);
@@ -2217,30 +1910,32 @@ int main() {
 
       switch (type) {
         case HSA_PACKET_TYPE_AGENT_DISPATCH:
-          air_printf("Dispatching agent dispatch packet\n\r");
-          handle_agent_dispatch_packet(amd_queue, mb_id, hqd_id);
+          air_printf("[User] Dispatching agent dispatch packet\n\r");
+          handle_agent_dispatch_packet(amd_queue, ctrl_id, hqd_id);
           break;
         case HSA_PACKET_TYPE_BARRIER_AND:
-          air_printf("Executing barrier and packet\r\n");
-          handle_barrier_and_packet(amd_queue, mb_id, hqd_id);
+          air_printf("[User] Executing barrier and packet\r\n");
+          handle_barrier_and_packet(amd_queue, ctrl_id, hqd_id);
           break;
         case HSA_PACKET_TYPE_BARRIER_OR:
-          air_printf("Executing barrier or packet\r\n");
-          handle_barrier_or_packet(amd_queue, mb_id, hqd_id);
+          air_printf("[User] Executing barrier or packet\r\n");
+          handle_barrier_or_packet(amd_queue, ctrl_id, hqd_id);
           break;
         // We are already handling the invalid packet above
         case HSA_PACKET_TYPE_INVALID:
           break;
         default:
-          air_printf("Unsupported packet type\n\r");
+          air_printf("[User] Unsupported packet type: %u\n\r", type);
           ++(*rd_id);
           break;
-      }
-    }
-    shell();
-  }
+      } // switch (type)
+    } // doorbell rung
+    // TODO: re-enable shell
+    //shell();
+  } // while (true)
 
   cleanup_platform();
+  cleanup_bps(bp_core_mgrs);
 
   return 0;
 }

@@ -1,6 +1,6 @@
 //===- shell.cpp ------------------------------------------------*- C++ -*-===//
 //
-// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// Copyright (C) 2023-2025, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 //
 //===----------------------------------------------------------------------===//
@@ -74,7 +74,6 @@ static void command_aie(char *line) {
 
   if (!op_str || strcmp(op_str, "status") == 0) {
     xil_printf("aie status col=%d row=%d\r\n", col, row);
-    mlir_aie_print_tile_status(col, row);
   } else if (strcmp(op_str, "reset") == 0) {
     xil_printf("aie reset col=%d row=%d\r\n", col, row);
     aie_tile_reset(col, row);
@@ -173,10 +172,6 @@ static void command_dma(char *line) {
   if (row > 8)
     return;
 
-  if (row == 0)
-    mlir_aie_print_shimdma_status(col);
-  else
-    mlir_aie_print_dma_status(col, row);
 }
 
 /*

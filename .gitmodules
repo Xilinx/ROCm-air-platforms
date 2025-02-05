@@ -1,0 +1,15 @@
+[submodule "platform/ip/black-parrot/black-parrot"]
+	path = platform/ip/black-parrot/black-parrot
+	url = git@github.com:black-parrot/black-parrot.git
+	branch = dev
+[submodule "platform/ip/black-parrot/black-parrot-subsystems"]
+	path = platform/ip/black-parrot/black-parrot-subsystems
+	url = git@github.com:black-parrot-hdk/black-parrot-subsystems.git
+	branch = axi4_top
+[submodule "firmware/bp/lib/embeddedsw"]
+	path = firmware/bp/lib/embeddedsw
+	url = https://github.com/Xilinx/embeddedsw.git
+[submodule "platform/ip/black-parrot/black-parrot-sdk"]
+	path = platform/ip/black-parrot/black-parrot-sdk
+	url = git@github.com:black-parrot-sdk/black-parrot-sdk.git
+  ignore = dirty

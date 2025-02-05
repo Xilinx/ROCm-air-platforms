@@ -3,7 +3,7 @@
 // The University of Illinois/NCSA
 // Open Source License (NCSA)
 //
-// Copyright (c) 2023, Advanced Micro Devices, Inc. All rights reserved.
+// Copyright (c) 2023-2025, Advanced Micro Devices, Inc. All rights reserved.
 //
 // Developed by:
 //
@@ -89,7 +89,10 @@ typedef enum {
   AIR_PKT_TYPE_SHIM_DMA_MEMCPY = 0x0100L,
   AIR_PKT_TYPE_HERD_SHIM_DMA_MEMCPY = 0x0101L,
   AIR_PKT_TYPE_HERD_SHIM_DMA_1D_STRIDED_MEMCPY = 0x0102L,
-  AIR_PKT_TYPE_ND_MEMCPY = 0x0103L
+  AIR_PKT_TYPE_ND_MEMCPY = 0x0103L,
+
+  AIR_PKT_TYPE_BP_CONTROL = 0x200L,
+  AIR_PKT_TYPE_UBENCH = 0x0201L
 } hsa_air_packet_type_t;
 
 /**

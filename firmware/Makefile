@@ -1,13 +1,16 @@
 # Copyright (C) 2022, Xilinx Inc.
-# Copyright (C) 2022, Advanced Micro Devices, Inc.
+# Copyright (C) 2022-2025, Advanced Micro Devices, Inc.
 # SPDX-License-Identifier: MIT
+
+export PLATFORM ?= vck5000
+export FW_MAIN ?= main.cpp
 
 BUILD_DIR := build
 APP_NAME := acdc_agent
 
 all: ${BUILD_DIR}/${APP_NAME}/acdc_agent.elf fixup
 
-${BUILD_DIR}/${APP_NAME}/acdc_agent.elf : ../platform/vck5000/vivado/xilinx_vck5000_air.xsa
+${BUILD_DIR}/${APP_NAME}/acdc_agent.elf : ../platform/$(PLATFORM)/vivado/xilinx_vck5000_air.xsa
 	rm -rf build && xsct build_arm.tcl
 
 fixup: ${BUILD_DIR}/${APP_NAME}/src/lscript.ld

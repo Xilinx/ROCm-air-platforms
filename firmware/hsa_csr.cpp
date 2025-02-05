@@ -1,6 +1,6 @@
 //===- hsa_csr.cpp -----------------------------------------------*- C++ -*-===//
 //
-// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// Copyright (C) 2023-2025, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 //
 //===----------------------------------------------------------------------===//
@@ -44,7 +44,17 @@ void hsa_csr_init()
   for (int i = 0; i < hsa_csr->num_aql_queues; ++i) {
     hsa_csr->amd_aql_queues[i] = reinterpret_cast<amd_queue_t*>(
         hsa_csr->queue_desc_base + i * PAGE_SIZE);
-    hsa_csr->doorbells[i] = hsa_csr->doorbell_base + i * PAGE_SIZE;
+    if (i < 2) {
+      // admin queue and first user queue get their own page
+      hsa_csr->doorbells[i] = hsa_csr->doorbell_base + i * PAGE_SIZE;
+    } else {
+      // all other user queues are placed sequentially into the user queue
+      // doorbell page. rocr/amdair will "allocate" doorbells in a single page
+      // when using the CP queues directly from host via single runtime process.
+      // WARNING: this assumes all CP user queues will be opened by a single
+      // runtime process. Supporting dynamic mapping of queues to CPs is TBD.
+      hsa_csr->doorbells[i] = hsa_csr->doorbells[i-1] + 8;
+    }
     hsa_csr->queue_bufs[i] = hsa_csr->queue_buf_base + i * PAGE_SIZE;
 
     hsa_csr->amd_aql_queues[i]->read_dispatch_id = 0;
@@ -71,7 +81,7 @@ void hsa_csr_init()
 void hsa_csr_print()
 {
   for (int i = 0; i < hsa_csr->num_aql_queues; ++i) {
-    air_printf("queue %d: addr %p, buf addr %p, rd ptr %p, wr ptr %p, rd id %lx, wr id %lx\n\r",
+    xil_printf("queue %d: addr %p, buf addr %p, rd ptr %p, wr ptr %p, rd id %lx, wr id %lx\n\r",
                i, hsa_csr->amd_aql_queues[i],
                hsa_csr->amd_aql_queues[i]->hsa_queue.base_address,
                (void*)&hsa_csr->amd_aql_queues[i]->read_dispatch_id,
@@ -81,6 +91,11 @@ void hsa_csr_print()
   }
 
   for (int i = 0; i < 4; ++i) {
-    air_printf("DNA reg%d: %x\n\r", i, hsa_csr->dna_reg[i]);
+    xil_printf("DNA reg%d: %x\n\r", i, hsa_csr->dna_reg[i]);
   }
+}
+
+void hsa_csr_init_ro()
+{
+  hsa_csr = reinterpret_cast<HsaControlStatusRegs*>(BRAM_BASE);
 }

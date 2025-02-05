@@ -1,5 +1,5 @@
+// Copyright (c) 2023-2025, Advanced Micro Devices, Inc. All rights reserved.
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2023, Advanced Micro Devices, Inc. All rights reserved.
 
 #ifndef HSA_CSR_H_
 #define HSA_CSR_H_
@@ -9,10 +9,10 @@
 #include "amd_hsa.h"
 #include "memory.h"
 
-inline constexpr int NUM_AQL_QUEUES(7);
+inline constexpr int NUM_AQL_QUEUES(6);
 inline constexpr int AQL_QUEUE_NUM_ENTRIES(64);
 inline constexpr int AQL_QUEUE_BYTES_PER_ENTRY(64);
-inline constexpr int NUM_HEAP_PAGES(7);
+inline constexpr int NUM_HEAP_PAGES(6);
 
 /// @struct HsaControlStatusRegs
 ///
@@ -77,5 +77,6 @@ extern HsaControlStatusRegs *hsa_csr;
 
 void hsa_csr_init();
 void hsa_csr_print();
+void hsa_csr_init_ro();
 
 #endif // HSA_CSR_H_

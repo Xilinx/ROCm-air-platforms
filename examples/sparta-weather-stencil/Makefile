@@ -1,4 +1,4 @@
-# Copyright (C) 2022, Advanced Micro Devices, Inc.
+# Copyright (C) 2022-2025, Advanced Micro Devices, Inc.
 # SPDX-License-Identifier: MIT
 
 CC=clang
@@ -6,7 +6,7 @@ CC=clang
 LDFLAGS = -fuse-ld=lld -rdynamic \
 	-std=c++20 -lstdc++ \
 	-lm \
-	-Wl,-rpath,${ROCM_ROOT}/lib ${ROCM_ROOT}/lib/libhsa-runtime64.so.1.9.0 \
+	-Wl,-rpath,${ROCM_ROOT}/lib ${ROCM_ROOT}/lib/libhsa-runtime64.so \
 	${ELFUTILS_ROOT}/libelf.a \
 
 CFLAGS += -I/${ROCM_ROOT}/include

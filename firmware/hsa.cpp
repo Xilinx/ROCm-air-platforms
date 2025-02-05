@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2023, Advanced Micro Devices, Inc. All rights reserved.
+// Copyright (c) 2023-2025, Advanced Micro Devices, Inc. All rights reserved.
 
 #include "hsa.h"
 
@@ -12,7 +12,6 @@ void HSA_API hsa_signal_subtract_scacq_screl(hsa_signal_t signal,
   uint64_t phys_addr(translate_virt_to_phys(signal.handle));
   amd_signal_t *amd_signal(reinterpret_cast<amd_signal_t*>(phys_addr));
   amd_signal->value = amd_signal->value - value;
-  
 }
 
 hsa_signal_value_t HSA_API hsa_signal_wait_scacquire(
@@ -24,7 +23,7 @@ hsa_signal_value_t HSA_API hsa_signal_wait_scacquire(
 
   // Signal handle of 0 means we do not need to wait on it
   if (signal.handle == 0)
-    return 0; 
+    return 0;
 
   hsa_signal_value_t ret = 0;
   uint64_t timeout = timeout_hint;
@@ -38,9 +37,9 @@ hsa_signal_value_t HSA_API hsa_signal_wait_scacquire(
     ret = amd_signal->value;
 
     // Testing the signal value
-    if(condition == HSA_SIGNAL_CONDITION_EQ  && ret == compare_value ||  
-        condition == HSA_SIGNAL_CONDITION_NE && ret != compare_value || 
-        condition == HSA_SIGNAL_CONDITION_LT && ret < compare_value  || 
+    if(condition == HSA_SIGNAL_CONDITION_EQ  && ret == compare_value ||
+        condition == HSA_SIGNAL_CONDITION_NE && ret != compare_value ||
+        condition == HSA_SIGNAL_CONDITION_LT && ret < compare_value  ||
         condition == HSA_SIGNAL_CONDITION_GTE && ret >= compare_value)
       return compare_value;
 

@@ -1,0 +1,24 @@
+# Copyright(C) 2024-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+
+# establish paths for ROCm-air-platforms and the IP directory
+PLATFORMS_TOP               ?= $(shell git rev-parse --show-toplevel)
+export IP_BASE_DIR          ?= $(abspath $(PLATFORMS_TOP)/platform/ip)
+
+# paths to each IP directory
+# can be overridden before including this file
+export BLACKPARROT_IP_DIR   ?= $(IP_BASE_DIR)/black-parrot
+
+# BlackParrot IP paths referenced by other IP blocks
+# can be overridden before including this file
+export BLACKPARROT_DIR      ?= $(BLACKPARROT_IP_DIR)/black-parrot
+export BLACKPARROT_SUB_DIR  ?= $(BLACKPARROT_IP_DIR)/black-parrot-subsystems
+export BLACKPARROT_SDK_DIR  ?= $(BLACKPARROT_IP_DIR)/black-parrot-sdk
+
+# override BP_TOOLS_DIR to point to an installation of Verilator for linting
+# can be overridden before including this file
+export BP_TOOLS_DIR         ?= $(abspath $(PLATFORMS_TOP)/../black-parrot-tools)
+VERILATOR                   := $(BP_TOOLS_DIR)/install/bin/verilator
+

@@ -1,4 +1,4 @@
-# Copyright (C) 2023, Advanced Micro Devices, Inc.
+# Copyright (C) 2023-2025, Advanced Micro Devices, Inc.
 # SPDX-License-Identifier: MIT
 
 # https://www.kernel.org/doc/html/latest/kbuild/modules.html
@@ -15,7 +15,7 @@ default:
 endif # KERNELRELEASE
 
 clean:
-	rm -f *.o *.ko *.a *.order *.mod.c *.symvers *.mod
+	rm -f *.o *.ko *.a *.order *.mod.c *.symvers *.mod .*.cmd
 
 .PHONY: tags
 

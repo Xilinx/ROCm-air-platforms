@@ -1,0 +1,22 @@
+# build artifacts
+*.cmd
+*.jou
+*.log
+*.xsa
+.Xil
+.ipcache
+_x
+Work
+build
+install
+platform_repo
+myproj
+libadf.a
+*.pdi
+*.ltx
+bootgen_log.txt
+*.link_summary
+*.exe
+
+# board files
+other-board-files/

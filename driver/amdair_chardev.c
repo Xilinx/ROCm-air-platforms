@@ -1,4 +1,4 @@
-// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// Copyright (C) 2023-2025, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 
 #include <linux/compat.h>
@@ -205,7 +205,11 @@ int amdair_chardev_init(struct pci_dev *pdev)
 
 	chardev_major = ret;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,4,0)
+	amdair_class = class_create(amdair_dev_name());
+#else
 	amdair_class = class_create(THIS_MODULE, amdair_dev_name());
+#endif
 	ret = PTR_ERR(amdair_class);
 	if (IS_ERR(amdair_class))
 		goto err_class;

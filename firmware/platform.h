@@ -1,6 +1,6 @@
 //===- platform.h -----------------------------------------------*- C++ -*-===//
 //
-// Copyright (C) 2023, Advanced Micro Devices, Inc.
+// Copyright (C) 2023-2025, Advanced Micro Devices, Inc.
 // SPDX-License-Identifier: MIT
 //
 //===----------------------------------------------------------------------===//
@@ -41,10 +41,6 @@ struct aie_libxaie_ctx_t {
 
 void init_platform();
 void cleanup_platform();
-
-void mlir_aie_print_dma_status(int col, int row);
-void mlir_aie_print_shimdma_status(uint16_t col);
-void mlir_aie_print_tile_status(int col, int row);
 
 void aie_tile_reset(int col, int row);
 void aie_tile_enable(int col, int row);
